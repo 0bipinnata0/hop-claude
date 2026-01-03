@@ -132,9 +132,10 @@ export class InteractiveUI {
     // 显示帮助文案
     console.log(chalk.gray('\n💡 提示：'));
     console.log(chalk.gray('  - 配置名称：仅用于区分不同配置（如：官方、公司中转、个人）'));
-    console.log(chalk.gray('  - API 地址：留空则使用 Claude 官方服务\n'));
+    console.log(chalk.gray('  - 连接方式：选择使用官方服务还是自定义中转站\n'));
 
-    const answers = await prompts([
+    // 第一步：基础信息
+    const basicAnswers = await prompts([
       {
         type: 'text',
         name: 'name',
@@ -149,10 +150,40 @@ export class InteractiveUI {
         validate: value => value.trim() ? true : 'API Key 不能为空',
       },
       {
-        type: 'text',
-        name: 'baseUrl',
-        message: 'API 地址（可选）：',
+        type: 'select',
+        name: 'connectionType',
+        message: '连接方式：',
+        choices: [
+          { title: '官方服务', value: 'official' },
+          { title: '自定义中转站', value: 'custom' },
+        ],
+        initial: 0,
       },
+    ]);
+
+    if (!basicAnswers.name || !basicAnswers.apiKey) {
+      displayWarning('已取消');
+      return;
+    }
+
+    // 第二步：如果选择自定义，询问 Base URL
+    let baseUrl: string | undefined;
+    if (basicAnswers.connectionType === 'custom') {
+      const { customUrl } = await prompts({
+        type: 'text',
+        name: 'customUrl',
+        message: 'API 地址（中转站 URL）：',
+        validate: value => value.trim() ? true : '自定义模式需要提供 API 地址',
+      });
+      if (!customUrl) {
+        displayWarning('已取消');
+        return;
+      }
+      baseUrl = customUrl;
+    }
+
+    // 第三步：其他配置
+    const extraAnswers = await prompts([
       {
         type: 'text',
         name: 'proxy',
@@ -172,15 +203,10 @@ export class InteractiveUI {
       },
     ]);
 
-    if (!answers.name || !answers.apiKey) {
-      displayWarning('已取消');
-      return;
-    }
-
     // 验证 API Key（如果用户选择）
-    if (answers.validate) {
+    if (extraAnswers.validate) {
       console.log(chalk.gray('正在验证 API Key...'));
-      const result = await validateApiKey(answers.apiKey, answers.baseUrl);
+      const result = await validateApiKey(basicAnswers.apiKey, baseUrl);
       if (!result.valid) {
         displayError(`API Key 验证失败：${result.error}`);
         const { continueAnyway } = await prompts({
@@ -199,11 +225,11 @@ export class InteractiveUI {
     }
 
     const profile: DecryptedProfile = {
-      name: answers.name,
-      apiKey: answers.apiKey,
-      baseUrl: answers.baseUrl || undefined,
-      proxy: answers.proxy || undefined,
-      disableNonessentialTraffic: answers.disableNonessentialTraffic,
+      name: basicAnswers.name,
+      apiKey: basicAnswers.apiKey,
+      baseUrl: baseUrl,
+      proxy: extraAnswers.proxy || undefined,
+      disableNonessentialTraffic: extraAnswers.disableNonessentialTraffic,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -233,18 +259,41 @@ export class InteractiveUI {
     const existing = await this.configManager.getProfile(name);
     if (!existing) return;
 
-    const answers = await prompts([
+    // 第一步：基础信息
+    const basicAnswers = await prompts([
       {
         type: 'password',
         name: 'apiKey',
         message: 'API Key (留空保持不变)：',
       },
       {
-        type: 'text',
-        name: 'baseUrl',
-        message: 'API 地址：',
-        initial: existing.baseUrl,
+        type: 'select',
+        name: 'connectionType',
+        message: '连接方式：',
+        choices: [
+          { title: '官方服务', value: 'official' },
+          { title: '自定义中转站', value: 'custom' },
+        ],
+        initial: existing.baseUrl ? 1 : 0,
       },
+    ]);
+
+    // 第二步：如果选择自定义，询问 Base URL
+    let baseUrl: string | undefined;
+    if (basicAnswers.connectionType === 'custom') {
+      const { customUrl } = await prompts({
+        type: 'text',
+        name: 'customUrl',
+        message: 'API 地址（中转站 URL）：',
+        initial: existing.baseUrl,
+        validate: value => value.trim() ? true : '自定义模式需要提供 API 地址',
+      });
+      if (customUrl === undefined) return;
+      baseUrl = customUrl;
+    }
+
+    // 第三步：其他配置
+    const extraAnswers = await prompts([
       {
         type: 'text',
         name: 'proxy',
@@ -261,10 +310,10 @@ export class InteractiveUI {
 
     const updated: DecryptedProfile = {
       ...existing,
-      apiKey: answers.apiKey || existing.apiKey,
-      baseUrl: answers.baseUrl || undefined,
-      proxy: answers.proxy || undefined,
-      disableNonessentialTraffic: answers.disableNonessentialTraffic,
+      apiKey: basicAnswers.apiKey || existing.apiKey,
+      baseUrl: baseUrl,
+      proxy: extraAnswers.proxy || undefined,
+      disableNonessentialTraffic: extraAnswers.disableNonessentialTraffic,
     };
 
     await this.configManager.saveProfile(updated);
