@@ -102,6 +102,9 @@ export async function createCLI() {
           return;
         }
 
+        // 获取透传参数（提前统一获取）
+        const claudeArgs = getClaudeArgs(process.argv);
+
         // 强制进入配置模式
         if (options.manage) {
           const shouldContinue = await ui.manageConfiguration();
@@ -110,7 +113,6 @@ export async function createCLI() {
           }
 
           // 如果是其他操作（选择、创建、编辑），继续启动 Claude
-          const claudeArgs = getClaudeArgs(process.argv);
           const currentProfile = await configManager.getCurrentProfile();
 
           if (currentProfile) {
@@ -118,9 +120,6 @@ export async function createCLI() {
           }
           return;
         }
-
-        // 获取透传参数（提前检测）
-        const claudeArgs = getClaudeArgs(process.argv);
 
         // 智能检测模式：
         // - 有透传参数 → 静默模式：直接启动 Claude
@@ -178,8 +177,10 @@ export async function createCLI() {
  * 获取需要透传给 claude 的参数
  * 支持 -- 分隔符来明确区分 hop-claude 参数和 claude 参数
  * 过滤掉 hop-claude 自己的参数
+ * @param argv 命令行参数数组
+ * @returns 需要透传的参数数组
  */
-function getClaudeArgs(argv: string[]): string[] {
+export function getClaudeArgs(argv: string[]): string[] {
   const hopClaudeFlags = [
     '-m', '--manage',
     '-l', '--list',
@@ -202,22 +203,28 @@ function getClaudeArgs(argv: string[]): string[] {
 
   // 否则，过滤掉 hop-claude 的参数
   const result: string[] = [];
-  let skip = false;
 
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
 
-    if (skip) {
-      skip = false;
-      continue;
-    }
-
     // 跳过 hop-claude 的选项
     if (hopClaudeFlags.includes(arg)) {
-      // 如果是需要值的选项，跳过下一个参数
-      if (['-s', '--switch', '-e', '--export', '-i', '--import'].includes(arg)) {
-        skip = true;
+      // 检查下一个参数是否存在且不是选项
+      const nextArg = argv[i + 1];
+
+      if (['-e', '--export', '-i', '--import'].includes(arg)) {
+        // 这些选项总是需要值，跳过下一个参数
+        if (nextArg) {
+          i++;  // 跳过值
+        }
+      } else if (['-s', '--switch'].includes(arg)) {
+        // -s 是可选值，只有当下一个参数存在且不是选项时才跳过
+        if (nextArg && !nextArg.startsWith('-')) {
+          i++;  // 跳过值
+        }
       }
+      // 其他选项（-m, -l, -v, -h, --migrate-encryption, --encryption-info）不需要值
+
       continue;
     }
 
