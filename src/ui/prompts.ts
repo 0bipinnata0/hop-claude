@@ -18,27 +18,27 @@ export class InteractiveUI {
   async showCurrentAndAsk(): Promise<boolean> {
     const current = await this.configManager.getCurrentProfile();
 
-    displayTitle('🔧 Claude Code Configuration Manager');
+    displayTitle('🔧 Claude Code 配置管理工具');
 
     if (current) {
-      console.log(chalk.cyan('Current Configuration:'));
-      displayInfo('Domain', chalk.green(current.domain));
+      console.log(chalk.cyan('当前配置：'));
+      displayInfo('域名/配置名', chalk.green(current.domain));
       displayInfo('Base URL', current.baseUrl);
-      displayInfo('Proxy', current.proxy, '(none)');
-      displayInfo('Disable Traffic', current.disableNonessentialTraffic ? 'Yes' : 'No');
+      displayInfo('代理', current.proxy, '(无)');
+      displayInfo('禁用非必要流量', current.disableNonessentialTraffic ? '是' : '否');
       console.log();
     } else {
-      displayWarning('No configuration set up yet.\n');
+      displayWarning('尚未配置。\n');
     }
 
     const { action } = await prompts({
       type: 'select',
       name: 'action',
-      message: 'What would you like to do?',
+      message: '请选择操作：',
       choices: [
-        { title: 'Continue with current configuration', value: 'continue', disabled: !current },
-        { title: 'Modify configuration', value: 'modify' },
-        { title: 'Exit', value: 'exit' },
+        { title: '使用当前配置继续', value: 'continue', disabled: !current },
+        { title: '修改配置', value: 'modify' },
+        { title: '退出', value: 'exit' },
       ],
       initial: current ? 0 : 1,
     });
@@ -63,15 +63,15 @@ export class InteractiveUI {
     const { action } = await prompts({
       type: 'select',
       name: 'action',
-      message: 'Configuration Management',
+      message: '配置管理',
       choices: [
-        { title: 'Select existing configuration', value: 'select', disabled: profiles.length === 0 },
-        { title: 'Create new configuration', value: 'create' },
-        { title: 'Edit existing configuration', value: 'edit', disabled: profiles.length === 0 },
-        { title: 'Delete configuration', value: 'delete', disabled: profiles.length === 0 },
-        { title: 'Export configuration', value: 'export' },
-        { title: 'Import configuration', value: 'import' },
-        { title: 'Back', value: 'back' },
+        { title: '选择已有配置', value: 'select', disabled: profiles.length === 0 },
+        { title: '创建新配置', value: 'create' },
+        { title: '编辑已有配置', value: 'edit', disabled: profiles.length === 0 },
+        { title: '删除配置', value: 'delete', disabled: profiles.length === 0 },
+        { title: '导出配置', value: 'export' },
+        { title: '导入配置', value: 'import' },
+        { title: '返回', value: 'back' },
       ],
     });
 
@@ -104,7 +104,7 @@ export class InteractiveUI {
     const { domain } = await prompts({
       type: 'select',
       name: 'domain',
-      message: 'Select a configuration:',
+      message: '选择配置：',
       choices: profiles.map(p => ({
         title: `${p.domain} (${p.maskedApiKey})`,
         value: p.domain,
@@ -113,7 +113,7 @@ export class InteractiveUI {
 
     if (domain) {
       await this.configManager.setCurrentProfile(domain);
-      displaySuccess(`Switched to: ${domain}`);
+      displaySuccess(`已切换到：${domain}`);
     }
   }
 
@@ -125,62 +125,62 @@ export class InteractiveUI {
       {
         type: 'text',
         name: 'domain',
-        message: 'Domain/Profile name:',
-        validate: value => value.trim() ? true : 'Domain cannot be empty',
+        message: '域名/配置名：',
+        validate: value => value.trim() ? true : '域名不能为空',
       },
       {
         type: 'password',
         name: 'apiKey',
-        message: 'API Key:',
-        validate: value => value.trim() ? true : 'API Key cannot be empty',
+        message: 'API Key (ANTHROPIC_AUTH_TOKEN)：',
+        validate: value => value.trim() ? true : 'API Key 不能为空',
       },
       {
         type: 'text',
         name: 'baseUrl',
-        message: 'Base URL (optional):',
+        message: 'Base URL (可选，用于中转站)：',
       },
       {
         type: 'text',
         name: 'proxy',
-        message: 'Proxy (optional):',
+        message: '代理 (可选)：',
       },
       {
         type: 'confirm',
         name: 'disableNonessentialTraffic',
-        message: 'Disable nonessential traffic?',
+        message: '禁用非必要流量？',
         initial: false,
       },
       {
         type: 'confirm',
         name: 'validate',
-        message: 'Validate API Key?',
+        message: '验证 API Key 有效性？',
         initial: false,
       },
     ]);
 
     if (!answers.domain || !answers.apiKey) {
-      displayWarning('Cancelled');
+      displayWarning('已取消');
       return;
     }
 
     // 验证 API Key（如果用户选择）
     if (answers.validate) {
-      console.log(chalk.gray('Validating API Key...'));
+      console.log(chalk.gray('正在验证 API Key...'));
       const result = await validateApiKey(answers.apiKey, answers.baseUrl);
       if (!result.valid) {
-        displayError(`API Key validation failed: ${result.error}`);
+        displayError(`API Key 验证失败：${result.error}`);
         const { continueAnyway } = await prompts({
           type: 'confirm',
           name: 'continueAnyway',
-          message: 'Continue anyway?',
+          message: '仍然继续？',
           initial: false,
         });
         if (!continueAnyway) {
-          displayWarning('Cancelled');
+          displayWarning('已取消');
           return;
         }
       } else {
-        displaySuccess('API Key is valid');
+        displaySuccess('API Key 有效');
       }
     }
 
@@ -197,7 +197,7 @@ export class InteractiveUI {
     await this.configManager.saveProfile(profile);
     await this.configManager.setCurrentProfile(profile.domain);
 
-    displaySuccess(`Configuration "${profile.domain}" created and activated`);
+    displaySuccess(`配置 "${profile.domain}" 已创建并激活`);
   }
 
   /**
@@ -207,7 +207,7 @@ export class InteractiveUI {
     const { domain } = await prompts({
       type: 'select',
       name: 'domain',
-      message: 'Select configuration to edit:',
+      message: '选择要编辑的配置：',
       choices: profiles.map(p => ({
         title: `${p.domain} (${p.maskedApiKey})`,
         value: p.domain,
@@ -223,24 +223,24 @@ export class InteractiveUI {
       {
         type: 'password',
         name: 'apiKey',
-        message: 'API Key (leave empty to keep current):',
+        message: 'API Key (留空保持不变)：',
       },
       {
         type: 'text',
         name: 'baseUrl',
-        message: 'Base URL:',
+        message: 'Base URL：',
         initial: existing.baseUrl,
       },
       {
         type: 'text',
         name: 'proxy',
-        message: 'Proxy:',
+        message: '代理：',
         initial: existing.proxy,
       },
       {
         type: 'confirm',
         name: 'disableNonessentialTraffic',
-        message: 'Disable nonessential traffic?',
+        message: '禁用非必要流量？',
         initial: existing.disableNonessentialTraffic,
       },
     ]);
@@ -254,7 +254,7 @@ export class InteractiveUI {
     };
 
     await this.configManager.saveProfile(updated);
-    displaySuccess(`Configuration "${domain}" updated`);
+    displaySuccess(`配置 "${domain}" 已更新`);
   }
 
   /**
@@ -264,7 +264,7 @@ export class InteractiveUI {
     const { domain } = await prompts({
       type: 'select',
       name: 'domain',
-      message: 'Select configuration to delete:',
+      message: '选择要删除的配置：',
       choices: profiles.map(p => ({
         title: `${p.domain} (${p.maskedApiKey})`,
         value: p.domain,
@@ -276,13 +276,13 @@ export class InteractiveUI {
     const { confirm } = await prompts({
       type: 'confirm',
       name: 'confirm',
-      message: `Are you sure you want to delete "${domain}"?`,
+      message: `确定要删除 "${domain}" 吗？`,
       initial: false,
     });
 
     if (confirm) {
       await this.configManager.deleteProfile(domain);
-      displaySuccess(`Configuration "${domain}" deleted`);
+      displaySuccess(`配置 "${domain}" 已删除`);
     }
   }
 
@@ -293,10 +293,10 @@ export class InteractiveUI {
     const profiles = await this.configManager.listProfiles();
     const config = await this.configManager.getConfig();
 
-    displayTitle('📋 All Configurations:');
+    displayTitle('📋 所有配置：');
 
     if (profiles.length === 0) {
-      console.log(chalk.gray('  No configurations found\n'));
+      console.log(chalk.gray('  未找到任何配置\n'));
       return;
     }
 
@@ -307,8 +307,8 @@ export class InteractiveUI {
       console.log(`${marker} ${chalk.bold(p.domain)}`);
       displayInfo('API Key', p.maskedApiKey);
       displayInfo('Base URL', p.baseUrl);
-      displayInfo('Proxy', p.proxy, '(none)');
-      displayInfo('Disable Traffic', p.disableNonessentialTraffic ? 'Yes' : 'No');
+      displayInfo('代理', p.proxy, '(无)');
+      displayInfo('禁用非必要流量', p.disableNonessentialTraffic ? '是' : '否');
       console.log();
     });
   }
@@ -320,18 +320,18 @@ export class InteractiveUI {
     const { outputPath } = await prompts({
       type: 'text',
       name: 'outputPath',
-      message: 'Export to file:',
-      initial: './cproxy-config-backup.json',
+      message: '导出到文件：',
+      initial: './hop-claude-backup.json',
     });
 
     if (!outputPath) return;
 
     try {
       await backupConfig(this.configManager, outputPath);
-      displaySuccess(`Configuration exported to: ${outputPath}`);
+      displaySuccess(`配置已导出到：${outputPath}`);
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
-      displayError(`Export failed: ${err.message}`);
+      displayError(`导出失败：${err.message}`);
     }
   }
 
@@ -342,7 +342,7 @@ export class InteractiveUI {
     const { inputPath } = await prompts({
       type: 'text',
       name: 'inputPath',
-      message: 'Import from file:',
+      message: '从文件导入：',
     });
 
     if (!inputPath) return;
@@ -350,21 +350,21 @@ export class InteractiveUI {
     const { confirm } = await prompts({
       type: 'confirm',
       name: 'confirm',
-      message: 'This will replace all existing configurations. Continue?',
+      message: '这将替换所有现有配置。是否继续？',
       initial: false,
     });
 
     if (!confirm) {
-      displayWarning('Cancelled');
+      displayWarning('已取消');
       return;
     }
 
     try {
       await restoreConfig(this.configManager, inputPath);
-      displaySuccess('Configuration imported successfully');
+      displaySuccess('配置导入成功');
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
-      displayError(`Import failed: ${err.message}`);
+      displayError(`导入失败：${err.message}`);
     }
   }
 }

@@ -42,7 +42,7 @@ export async function launchClaude(
   // 构建环境变量
   const env: EnvironmentVariables = {
     ...process.env,
-    ANTHROPIC_API_KEY: profile.apiKey,
+    ANTHROPIC_AUTH_TOKEN: profile.apiKey,
   };
 
   if (profile.baseUrl) {
@@ -73,9 +73,9 @@ export async function launchClaude(
 
   // 处理错误
   claude.on('error', (error) => {
-    console.error('Failed to launch claude:', error.message);
-    console.error('\nMake sure Claude CLI is installed and available in your PATH.');
-    console.error('Install it from: https://github.com/anthropics/claude-code');
+    console.error('启动 Claude 失败：', error.message);
+    console.error('\n请确保 Claude CLI 已安装并在 PATH 中可用。');
+    console.error('安装地址：https://github.com/anthropics/claude-code');
     process.exit(1);
   });
 }

@@ -29,7 +29,7 @@ export interface DecryptedProfile extends Omit<ProfileConfig, 'apiKey'> {
 }
 
 export interface EnvironmentVariables {
-  ANTHROPIC_API_KEY?: string;
+  ANTHROPIC_AUTH_TOKEN?: string;
   ANTHROPIC_BASE_URL?: string;
   HTTP_PROXY?: string;
   HTTPS_PROXY?: string;

@@ -19,17 +19,17 @@ export class EncryptionMigration {
    * 执行加密模式迁移
    */
   async migrate(): Promise<void> {
-    displayMessage('\n=== Encryption Mode Migration ===\n');
+    displayMessage('\n=== 加密模式迁移 ===\n');
 
     // 获取当前加密模式
     const currentMode = await this.configManager.getEncryptionMode();
 
-    displayMessage(`Current encryption mode: ${currentMode}`);
+    displayMessage(`当前加密模式：${currentMode}`);
 
     if (currentMode === 'legacy') {
-      displayWarning('\nLegacy mode uses machine-bound encryption.');
-      displayWarning('Your exported config cannot be restored on different machines.');
-      displayMessage('\nRecommended: Migrate to a more secure and portable mode.\n');
+      displayWarning('\nLegacy 模式使用机器绑定加密。');
+      displayWarning('导出的配置无法在其他机器上恢复。');
+      displayMessage('\n建议：迁移到更安全和可移植的模式。\n');
     }
 
     // 检查 keychain 是否可用
@@ -40,42 +40,42 @@ export class EncryptionMigration {
 
     if (keychainAvailable) {
       choices.push({
-        title: 'Keychain (Recommended)',
+        title: 'Keychain（推荐）',
         value: 'keychain',
-        description: 'Store keys in OS keychain - most secure, no passwords needed',
+        description: '将密钥存储在系统 keychain - 最安全，无需记住密码',
       });
     } else {
-      displayWarning('Note: OS Keychain not available on this system.');
+      displayWarning('注意：本系统不支持 OS Keychain。');
     }
 
     choices.push({
-      title: 'Passphrase',
+      title: 'Passphrase（密码）',
       value: 'passphrase',
-      description: 'Encrypt with password - portable across machines, password required',
+      description: '使用密码加密 - 可跨机器移植，每次需要输入密码',
     });
 
     if (currentMode !== 'legacy') {
       choices.push({
-        title: 'Legacy (Not recommended)',
+        title: 'Legacy（不推荐）',
         value: 'legacy',
-        description: 'Machine-bound encryption - cannot be restored on different machines',
+        description: '机器绑定加密 - 无法在其他机器上恢复',
       });
     }
 
     const { newMode } = await prompts({
       type: 'select',
       name: 'newMode',
-      message: 'Choose new encryption mode:',
+      message: '选择新的加密模式：',
       choices,
     });
 
     if (!newMode) {
-      displayWarning('Migration cancelled');
+      displayWarning('已取消迁移');
       return;
     }
 
     if (newMode === currentMode) {
-      displayMessage('Already using this mode. No migration needed.');
+      displayMessage('已在使用此模式，无需迁移。');
       return;
     }
 
@@ -85,24 +85,24 @@ export class EncryptionMigration {
       const { pwd1 } = await prompts({
         type: 'password',
         name: 'pwd1',
-        message: 'Enter new passphrase for encryption:',
+        message: '输入新密码用于加密：',
         validate: (value: string) =>
-          value.length >= 8 ? true : 'Passphrase must be at least 8 characters',
+          value.length >= 8 ? true : '密码至少需要 8 个字符',
       });
 
       if (!pwd1) {
-        displayWarning('Migration cancelled');
+        displayWarning('已取消迁移');
         return;
       }
 
       const { pwd2 } = await prompts({
         type: 'password',
         name: 'pwd2',
-        message: 'Confirm passphrase:',
+        message: '确认密码：',
       });
 
       if (pwd1 !== pwd2) {
-        displayError('Passphrases do not match');
+        displayError('两次密码输入不一致');
         return;
       }
 
@@ -113,57 +113,57 @@ export class EncryptionMigration {
     const { confirm } = await prompts({
       type: 'confirm',
       name: 'confirm',
-      message: `Migrate from ${currentMode} to ${newMode} mode?`,
+      message: `确认从 ${currentMode} 迁移到 ${newMode} 模式？`,
       initial: false,
     });
 
     if (!confirm) {
-      displayWarning('Migration cancelled');
+      displayWarning('已取消迁移');
       return;
     }
 
     try {
-      displayMessage('\nBacking up current configuration...');
+      displayMessage('\n正在备份当前配置...');
 
       // 创建备份
       const backupPath = `${this.configManager.getConfigPath()}.backup-${Date.now()}`;
       const configData = await this.configManager.exportConfig();
       const fs = await import('fs/promises');
       await fs.writeFile(backupPath, configData, 'utf8');
-      displaySuccess(`Backup created: ${backupPath}`);
+      displaySuccess(`备份已创建：${backupPath}`);
 
-      displayMessage('\nMigrating encryption mode...');
+      displayMessage('\n正在迁移加密模式...');
 
       // 执行迁移
       await this.configManager.switchEncryptionMode(newMode, passphrase);
 
-      displaySuccess(`\nMigration completed!`);
-      displayMessage(`\nEncryption mode changed: ${currentMode} → ${newMode}`);
+      displaySuccess(`\n迁移完成！`);
+      displayMessage(`\n加密模式已更改：${currentMode} → ${newMode}`);
 
       if (newMode === 'keychain') {
-        displayMessage('\nYour API keys are now stored in the system keychain.');
-        displayMessage('The config file only contains non-sensitive data.');
+        displayMessage('\n您的 API 密钥现在存储在系统 keychain 中。');
+        displayMessage('配置文件仅包含非敏感数据。');
       } else if (newMode === 'passphrase') {
-        displayWarning('\nImportant: Remember your passphrase!');
-        displayWarning('You will need it every time you use hop-claude.');
+        displayWarning('\n重要：请记住您的密码！');
+        displayWarning('每次使用 hop-claude 时都需要输入密码。');
         if (passphrase) {
           this.configManager.setSessionPassphrase(passphrase);
         }
       }
 
-      displayMessage(`\nBackup file: ${backupPath}`);
-      displayMessage('You can delete it after verifying the migration works correctly.\n');
+      displayMessage(`\n备份文件：${backupPath}`);
+      displayMessage('验证迁移成功后可以删除备份文件。\n');
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
-      displayError(`Migration failed: ${err.message}`);
+      displayError(`迁移失败：${err.message}`);
 
       if (process.env.DEBUG) {
-        console.error('\nStack trace:');
+        console.error('\n堆栈跟踪：');
         console.error(err.stack);
       }
 
-      displayWarning('\nYour configuration has been backed up.');
-      displayWarning('Please restore from backup if needed.');
+      displayWarning('\n您的配置已备份。');
+      displayWarning('如有需要请从备份恢复。');
       process.exit(1);
     }
   }
@@ -175,38 +175,38 @@ export class EncryptionMigration {
     const mode = await this.configManager.getEncryptionMode();
     const keychainAvailable = await KeychainManager.isAvailable();
 
-    displayMessage('\n=== Encryption Mode Information ===\n');
-    displayMessage(`Current mode: ${mode}`);
+    displayMessage('\n=== 加密模式信息 ===\n');
+    displayMessage(`当前模式：${mode}`);
 
     switch (mode) {
       case 'legacy':
-        displayMessage('\nLegacy mode:');
-        displayMessage('  - Uses machine-bound encryption (hostname + username)');
-        displayMessage('  - Keys are encrypted but tied to this machine');
-        displayMessage('  - Cannot restore exported configs on different machines');
-        displayWarning('\n  Warning: This mode is deprecated and less secure.');
-        displayMessage('  Consider migrating to keychain or passphrase mode.');
+        displayMessage('\nLegacy 模式：');
+        displayMessage('  - 使用机器绑定加密（hostname + username）');
+        displayMessage('  - 密钥已加密但绑定到本机');
+        displayMessage('  - 导出的配置无法在其他机器上恢复');
+        displayWarning('\n  警告：此模式已弃用且安全性较低。');
+        displayMessage('  建议迁移到 keychain 或 passphrase 模式。');
         break;
 
       case 'keychain':
-        displayMessage('\nKeychain mode:');
-        displayMessage('  - Keys stored in OS keychain (most secure)');
-        displayMessage('  - No passwords needed for daily use');
-        displayMessage('  - Keys never written to disk');
-        displayWarning('\n  Note: Cannot export/import keys across machines.');
+        displayMessage('\nKeychain 模式：');
+        displayMessage('  - 密钥存储在系统 keychain（最安全）');
+        displayMessage('  - 日常使用无需输入密码');
+        displayMessage('  - 密钥永不写入磁盘');
+        displayWarning('\n  注意：无法跨机器导出/导入密钥。');
         break;
 
       case 'passphrase':
-        displayMessage('\nPassphrase mode:');
-        displayMessage('  - Keys encrypted with your password');
-        displayMessage('  - Fully portable across machines');
-        displayMessage('  - Password required for each operation');
+        displayMessage('\nPassphrase 模式：');
+        displayMessage('  - 使用密码加密密钥');
+        displayMessage('  - 完全可跨机器移植');
+        displayMessage('  - 每次操作需要输入密码');
         break;
     }
 
-    displayMessage(`\nOS Keychain available: ${keychainAvailable ? 'Yes' : 'No'}`);
+    displayMessage(`\n系统 Keychain 可用：${keychainAvailable ? '是' : '否'}`);
 
-    displayMessage('\nTo migrate to a different mode, run:');
+    displayMessage('\n要迁移到不同模式，请运行：');
     displayMessage('  hop-claude --migrate-encryption\n');
   }
 }
