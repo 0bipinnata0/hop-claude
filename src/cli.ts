@@ -19,7 +19,7 @@ export async function createCLI() {
     .name('hop-claude')
     .version(pkg.version)
     .description('Claude Code 配置管理和启动工具')
-    .option('-c, --config', '进入配置管理模式')
+    .option('-m, --manage', '进入配置管理模式')
     .option('-l, --list', '列出所有配置')
     .option('-s, --switch [profile]', '切换到指定配置（不提供名称则显示选择列表）')
     .option('-e, --export <file>', '导出配置到文件')
@@ -103,7 +103,7 @@ export async function createCLI() {
         }
 
         // 强制进入配置模式
-        if (options.config) {
+        if (options.manage) {
           const shouldContinue = await ui.manageConfiguration();
           if (!shouldContinue) {
             return; // 导入/导出等操作后直接退出
@@ -152,11 +152,12 @@ export async function createCLI() {
 
 /**
  * 获取需要透传给 claude 的参数
- * 过滤掉 cproxy 自己的参数
+ * 支持 -- 分隔符来明确区分 hop-claude 参数和 claude 参数
+ * 过滤掉 hop-claude 自己的参数
  */
 function getClaudeArgs(argv: string[]): string[] {
-  const cproxyFlags = [
-    '-c', '--config',
+  const hopClaudeFlags = [
+    '-m', '--manage',
     '-l', '--list',
     '-s', '--switch',
     '-e', '--export',
@@ -166,6 +167,16 @@ function getClaudeArgs(argv: string[]): string[] {
     '--migrate-encryption',
     '--encryption-info'
   ];
+
+  // 查找 -- 分隔符
+  const separatorIndex = argv.indexOf('--');
+
+  // 如果有 -- 分隔符，直接返回分隔符后面的所有参数
+  if (separatorIndex !== -1) {
+    return argv.slice(separatorIndex + 1);
+  }
+
+  // 否则，过滤掉 hop-claude 的参数
   const result: string[] = [];
   let skip = false;
 
@@ -177,8 +188,8 @@ function getClaudeArgs(argv: string[]): string[] {
       continue;
     }
 
-    // 跳过 cproxy 的选项
-    if (cproxyFlags.includes(arg)) {
+    // 跳过 hop-claude 的选项
+    if (hopClaudeFlags.includes(arg)) {
       // 如果是需要值的选项，跳过下一个参数
       if (['-s', '--switch', '-e', '--export', '-i', '--import'].includes(arg)) {
         skip = true;
