@@ -1,19 +1,16 @@
 import { ConfigStorage } from './storage.js';
-import { Encryption } from './encryption.js';
 import { PassphraseEncryption } from './encryption-v2.js';
 import { KeychainManager } from './keychain.js';
 import type { ConfigStore, ProfileConfig, DecryptedProfile, EncryptionMode } from '../types/index.js';
 
 /**
  * 配置管理核心类
- * 支持三种加密模式：
- * - legacy: 机器绑定加密（向后兼容）
+ * 支持两种加密模式：
  * - keychain: OS 密钥链存储（推荐）
- * - passphrase: 用户密码加密（可移植）
+ * - passphrase: 密码加密（可移植）
  */
 export class ConfigManager {
   private storage: ConfigStorage;
-  private legacyEncryption: Encryption;
   private passphraseEncryption: PassphraseEncryption;
   private keychainManager: KeychainManager;
 
@@ -22,7 +19,6 @@ export class ConfigManager {
 
   constructor() {
     this.storage = new ConfigStorage();
-    this.legacyEncryption = new Encryption();
     this.passphraseEncryption = new PassphraseEncryption();
     this.keychainManager = new KeychainManager();
   }
@@ -46,7 +42,12 @@ export class ConfigManager {
    */
   async getEncryptionMode(): Promise<EncryptionMode> {
     const config = await this.storage.read();
-    return config?.encryptionMode || 'legacy';  // 默认 legacy 保持向后兼容
+    if (config?.encryptionMode) {
+      return config.encryptionMode;
+    }
+    // 默认：keychain 可用则用 keychain，否则用 passphrase
+    const keychainAvailable = await KeychainManager.isAvailable();
+    return keychainAvailable ? 'keychain' : 'passphrase';
   }
 
   /**
@@ -55,19 +56,24 @@ export class ConfigManager {
   async initialize(): Promise<ConfigStore> {
     const existing = await this.storage.read();
     if (existing) {
-      // 确保有 encryptionMode 字段（向后兼容）
+      // 确保有 encryptionMode 字段
       if (!existing.encryptionMode) {
-        existing.encryptionMode = 'legacy';
+        const keychainAvailable = await KeychainManager.isAvailable();
+        existing.encryptionMode = keychainAvailable ? 'keychain' : 'passphrase';
       }
       return existing;
     }
+
+    // 检测系统支持的加密模式
+    const keychainAvailable = await KeychainManager.isAvailable();
+    const encryptionMode: EncryptionMode = keychainAvailable ? 'keychain' : 'passphrase';
 
     const newConfig: ConfigStore = {
       version: '1.0.0',
       currentProfile: '',
       profiles: [],
-      encryptionSalt: this.legacyEncryption.generateSalt(),
-      encryptionMode: 'legacy',  // 默认使用 legacy 模式
+      encryptionSalt: encryptionMode === 'passphrase' ? this.passphraseEncryption.generateSalt() : undefined,
+      encryptionMode,
     };
 
     await this.storage.write(newConfig);
@@ -81,9 +87,10 @@ export class ConfigManager {
     const config = await this.storage.read();
     if (!config) return await this.initialize();
 
-    // 向后兼容：添加默认的 encryptionMode
+    // 确保有 encryptionMode 字段
     if (!config.encryptionMode) {
-      config.encryptionMode = 'legacy';
+      const keychainAvailable = await KeychainManager.isAvailable();
+      config.encryptionMode = keychainAvailable ? 'keychain' : 'passphrase';
     }
 
     return config;
@@ -96,50 +103,34 @@ export class ConfigManager {
    */
   async saveProfile(profile: DecryptedProfile, passphrase?: string): Promise<void> {
     const config = await this.getConfig();
-    const mode = config.encryptionMode || 'legacy';
+    const mode = config.encryptionMode!;
 
-    if (!config.encryptionSalt && mode !== 'keychain') {
-      config.encryptionSalt = this.legacyEncryption.generateSalt();
+    if (!config.encryptionSalt && mode === 'passphrase') {
+      config.encryptionSalt = this.passphraseEncryption.generateSalt();
     }
 
     let encryptedApiKey: string;
 
     // 根据加密模式处理 API Key
-    switch (mode) {
-      case 'keychain':
-        // Keychain 模式：存储到 OS 密钥链
-        await this.keychainManager.setAPIKey(profile.domain, profile.apiKey);
-        // config.json 中存储占位符
-        encryptedApiKey = '__KEYCHAIN__';
-        break;
-
-      case 'passphrase':
-        // Passphrase 模式：使用用户密码加密
-        const pwd = passphrase || this.sessionPassphrase;
-        if (!pwd) {
-          throw new Error('Passphrase required for passphrase encryption mode');
-        }
-        if (!config.encryptionSalt) {
-          config.encryptionSalt = this.passphraseEncryption.generateSalt();
-        }
-        encryptedApiKey = this.passphraseEncryption.encrypt(
-          profile.apiKey,
-          pwd,
-          config.encryptionSalt
-        );
-        break;
-
-      case 'legacy':
-      default:
-        // Legacy 模式：机器绑定加密
-        if (!config.encryptionSalt) {
-          config.encryptionSalt = this.legacyEncryption.generateSalt();
-        }
-        encryptedApiKey = this.legacyEncryption.encrypt(
-          profile.apiKey,
-          config.encryptionSalt
-        );
-        break;
+    if (mode === 'keychain') {
+      // Keychain 模式：存储到 OS 密钥链
+      await this.keychainManager.setAPIKey(profile.domain, profile.apiKey);
+      // config.json 中存储占位符
+      encryptedApiKey = '__KEYCHAIN__';
+    } else {
+      // Passphrase 模式：使用用户密码加密
+      const pwd = passphrase || this.sessionPassphrase;
+      if (!pwd && pwd !== '') {
+        throw new Error('需要密码来加密 API Key');
+      }
+      if (!config.encryptionSalt) {
+        config.encryptionSalt = this.passphraseEncryption.generateSalt();
+      }
+      encryptedApiKey = this.passphraseEncryption.encrypt(
+        profile.apiKey,
+        pwd,
+        config.encryptionSalt
+      );
     }
 
     const encryptedProfile: ProfileConfig = {
@@ -170,47 +161,31 @@ export class ConfigManager {
 
     if (!profile) return null;
 
-    const mode = config.encryptionMode || 'legacy';
+    const mode = config.encryptionMode!;
     let decryptedApiKey: string;
 
     // 根据加密模式解密 API Key
-    switch (mode) {
-      case 'keychain':
-        // Keychain 模式：从 OS 密钥链读取
-        const keychainKey = await this.keychainManager.getAPIKey(domain);
-        if (!keychainKey) {
-          throw new Error(`API key not found in keychain for profile: ${domain}`);
-        }
-        decryptedApiKey = keychainKey;
-        break;
-
-      case 'passphrase':
-        // Passphrase 模式：使用用户密码解密
-        const pwd = passphrase || this.sessionPassphrase;
-        if (!pwd) {
-          throw new Error('Passphrase required to decrypt API key');
-        }
-        if (!config.encryptionSalt) {
-          throw new Error('Encryption salt not found');
-        }
-        decryptedApiKey = this.passphraseEncryption.decrypt(
-          profile.apiKey,
-          pwd,
-          config.encryptionSalt
-        );
-        break;
-
-      case 'legacy':
-      default:
-        // Legacy 模式：机器绑定解密
-        if (!config.encryptionSalt) {
-          throw new Error('Encryption salt not found');
-        }
-        decryptedApiKey = this.legacyEncryption.decrypt(
-          profile.apiKey,
-          config.encryptionSalt
-        );
-        break;
+    if (mode === 'keychain') {
+      // Keychain 模式：从 OS 密钥链读取
+      const keychainKey = await this.keychainManager.getAPIKey(domain);
+      if (!keychainKey) {
+        throw new Error(`密钥链中未找到配置 ${domain} 的 API key`);
+      }
+      decryptedApiKey = keychainKey;
+    } else {
+      // Passphrase 模式：使用用户密码解密
+      const pwd = passphrase || this.sessionPassphrase;
+      if (!pwd && pwd !== '') {
+        throw new Error('需要密码来解密 API key');
+      }
+      if (!config.encryptionSalt) {
+        throw new Error('未找到加密 salt');
+      }
+      decryptedApiKey = this.passphraseEncryption.decrypt(
+        profile.apiKey,
+        pwd,
+        config.encryptionSalt
+      );
     }
 
     return {
@@ -244,7 +219,7 @@ export class ConfigManager {
    */
   async listProfiles(passphrase?: string): Promise<Array<ProfileConfig & { maskedApiKey: string }>> {
     const config = await this.getConfig();
-    const mode = config.encryptionMode || 'legacy';
+    const mode = config.encryptionMode!;
 
     const results: Array<ProfileConfig & { maskedApiKey: string }> = [];
 
@@ -252,41 +227,28 @@ export class ConfigManager {
       try {
         let decryptedKey: string;
 
-        switch (mode) {
-          case 'keychain':
-            const keychainKey = await this.keychainManager.getAPIKey(p.domain);
-            decryptedKey = keychainKey || '';
-            break;
-
-          case 'passphrase':
-            const pwd = passphrase || this.sessionPassphrase;
-            if (!pwd || !config.encryptionSalt) {
-              decryptedKey = '';
-              break;
-            }
+        if (mode === 'keychain') {
+          const keychainKey = await this.keychainManager.getAPIKey(p.domain);
+          decryptedKey = keychainKey || '';
+        } else {
+          // Passphrase 模式
+          const pwd = passphrase || this.sessionPassphrase;
+          if (!pwd && pwd !== '') {
+            decryptedKey = '';
+          } else if (!config.encryptionSalt) {
+            decryptedKey = '';
+          } else {
             decryptedKey = this.passphraseEncryption.decrypt(
               p.apiKey,
               pwd,
               config.encryptionSalt
             );
-            break;
-
-          case 'legacy':
-          default:
-            if (!config.encryptionSalt) {
-              decryptedKey = '';
-              break;
-            }
-            decryptedKey = this.legacyEncryption.decrypt(
-              p.apiKey,
-              config.encryptionSalt
-            );
-            break;
+          }
         }
 
         results.push({
           ...p,
-          maskedApiKey: this.legacyEncryption.maskApiKey(decryptedKey),
+          maskedApiKey: this.passphraseEncryption.maskApiKey(decryptedKey),
         });
       } catch (error: unknown) {
         // 如果解密失败，显示错误标记
@@ -305,7 +267,7 @@ export class ConfigManager {
    */
   async deleteProfile(domain: string): Promise<void> {
     const config = await this.getConfig();
-    const mode = config.encryptionMode || 'legacy';
+    const mode = config.encryptionMode!;
 
     // Keychain 模式下，同时从密钥链中删除
     if (mode === 'keychain') {
@@ -347,9 +309,10 @@ export class ConfigManager {
       throw new Error('Invalid configuration format');
     }
 
-    // 向后兼容：如果没有 encryptionMode，设置为 legacy
+    // 确保有加密模式
     if (!config.encryptionMode) {
-      config.encryptionMode = 'legacy';
+      const keychainAvailable = await KeychainManager.isAvailable();
+      config.encryptionMode = keychainAvailable ? 'keychain' : 'passphrase';
     }
 
     await this.storage.write(config);
@@ -365,7 +328,7 @@ export class ConfigManager {
     passphrase?: string
   ): Promise<void> {
     const config = await this.getConfig();
-    const oldMode = config.encryptionMode || 'legacy';
+    const oldMode = config.encryptionMode!;
 
     if (oldMode === newMode) {
       return; // 无需切换
@@ -384,7 +347,7 @@ export class ConfigManager {
     // 更新加密模式
     config.encryptionMode = newMode;
 
-    // 如果切换到非 legacy/passphrase 模式，可能需要新的 salt
+    // 如果切换到 passphrase 模式，可能需要新的 salt
     if (newMode === 'passphrase' && !config.encryptionSalt) {
       config.encryptionSalt = this.passphraseEncryption.generateSalt();
     }

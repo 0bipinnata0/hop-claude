@@ -1,14 +1,13 @@
 /**
  * 加密模式
- * - legacy: 旧版机器绑定加密（已弃用，但保持向后兼容）
  * - keychain: OS 密钥链存储（推荐，最安全）
  * - passphrase: 密码加密（可移植）
  */
-export type EncryptionMode = 'legacy' | 'keychain' | 'passphrase';
+export type EncryptionMode = 'keychain' | 'passphrase';
 
 export interface ProfileConfig {
   domain: string;
-  apiKey: string;  // 加密后的 API Key（legacy/passphrase 模式）或占位符（keychain 模式）
+  apiKey: string;  // 加密后的 API Key（passphrase 模式）或占位符（keychain 模式）
   baseUrl?: string;
   proxy?: string;
   disableNonessentialTraffic?: boolean;
@@ -20,8 +19,8 @@ export interface ConfigStore {
   version: string;
   currentProfile: string;
   profiles: ProfileConfig[];
-  encryptionSalt?: string;  // legacy/passphrase 模式使用
-  encryptionMode?: EncryptionMode;  // 加密模式，默认 'legacy' 保持向后兼容
+  encryptionSalt?: string;  // passphrase 模式使用
+  encryptionMode?: EncryptionMode;  // 加密模式，默认 'keychain' 或 'passphrase'
 }
 
 export interface DecryptedProfile extends Omit<ProfileConfig, 'apiKey'> {

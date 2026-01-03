@@ -26,12 +26,6 @@ export class EncryptionMigration {
 
     displayMessage(`当前加密模式：${currentMode}`);
 
-    if (currentMode === 'legacy') {
-      displayWarning('\nLegacy 模式使用机器绑定加密。');
-      displayWarning('导出的配置无法在其他机器上恢复。');
-      displayMessage('\n建议：迁移到更安全和可移植的模式。\n');
-    }
-
     // 检查 keychain 是否可用
     const keychainAvailable = await KeychainManager.isAvailable();
 
@@ -53,14 +47,6 @@ export class EncryptionMigration {
       value: 'passphrase',
       description: '使用密码加密 - 可跨机器移植，每次需要输入密码',
     });
-
-    if (currentMode !== 'legacy') {
-      choices.push({
-        title: 'Legacy（不推荐）',
-        value: 'legacy',
-        description: '机器绑定加密 - 无法在其他机器上恢复',
-      });
-    }
 
     const { newMode } = await prompts({
       type: 'select',
@@ -224,15 +210,6 @@ export class EncryptionMigration {
     displayMessage(`当前模式：${mode}`);
 
     switch (mode) {
-      case 'legacy':
-        displayMessage('\nLegacy 模式：');
-        displayMessage('  - 使用机器绑定加密（hostname + username）');
-        displayMessage('  - 密钥已加密但绑定到本机');
-        displayMessage('  - 导出的配置无法在其他机器上恢复');
-        displayWarning('\n  警告：此模式已弃用且安全性较低。');
-        displayMessage('  建议迁移到 keychain 或 passphrase 模式。');
-        break;
-
       case 'keychain':
         displayMessage('\nKeychain 模式：');
         displayMessage('  - 密钥存储在系统 keychain（最安全）');
