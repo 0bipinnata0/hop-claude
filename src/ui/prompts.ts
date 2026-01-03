@@ -13,11 +13,64 @@ export class InteractiveUI {
   constructor(private configManager: ConfigManager) {}
 
   /**
+   * 获取密码（如果需要）
+   * 先尝试空密码，失败后提示输入
+   */
+  private async getPassphraseIfNeeded(): Promise<string | undefined> {
+    const mode = await this.configManager.getEncryptionMode();
+
+    if (mode !== 'passphrase') {
+      return undefined;
+    }
+
+    const config = await this.configManager.getConfig();
+    if (config.profiles.length === 0 || !config.currentProfile) {
+      // 没有配置，不需要密码
+      return '';
+    }
+
+    // 先尝试空密码
+    try {
+      this.configManager.setSessionPassphrase('');
+      await this.configManager.getCurrentProfile('');
+      // 空密码可用
+      return '';
+    } catch {
+      // 空密码失败，清除并提示输入
+      this.configManager.clearSessionPassphrase();
+    }
+
+    // 提示输入密码
+    const { passphrase } = await prompts({
+      type: 'password',
+      name: 'passphrase',
+      message: '输入密码以解密配置：',
+    });
+
+    if (passphrase === undefined) {
+      throw new Error('需要密码来解密配置');
+    }
+
+    this.configManager.setSessionPassphrase(passphrase);
+    return passphrase;
+  }
+
+  /**
    * 显示当前配置并询问是否修改
    * @returns 是否应该继续启动 Claude
    */
   async showCurrentAndAsk(): Promise<boolean> {
-    const current = await this.configManager.getCurrentProfile();
+    // 如果是密码模式，先获取密码
+    let passphrase: string | undefined;
+    try {
+      passphrase = await this.getPassphraseIfNeeded();
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      displayError(err.message);
+      return false;
+    }
+
+    const current = await this.configManager.getCurrentProfile(passphrase);
 
     displayTitle('🔧 Claude Code 配置管理工具');
 
@@ -60,7 +113,17 @@ export class InteractiveUI {
    * @returns 是否应该继续启动 Claude（导入/导出操作返回 false）
    */
   async manageConfiguration(): Promise<boolean> {
-    const profiles = await this.configManager.listProfiles();
+    // 如果是密码模式，先获取密码
+    let passphrase: string | undefined;
+    try {
+      passphrase = await this.getPassphraseIfNeeded();
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      displayError(err.message);
+      return false;
+    }
+
+    const profiles = await this.configManager.listProfiles(passphrase);
 
     const { action } = await prompts({
       type: 'select',
@@ -294,7 +357,17 @@ export class InteractiveUI {
    * 列出所有配置
    */
   async listConfigurations(): Promise<void> {
-    const profiles = await this.configManager.listProfiles();
+    // 如果是密码模式，先获取密码
+    let passphrase: string | undefined;
+    try {
+      passphrase = await this.getPassphraseIfNeeded();
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      displayError(err.message);
+      return;
+    }
+
+    const profiles = await this.configManager.listProfiles(passphrase);
     const config = await this.configManager.getConfig();
 
     displayTitle('📋 所有配置：');
