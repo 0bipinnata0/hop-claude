@@ -30,8 +30,8 @@ export class InteractiveUI {
 
     // 有配置时显示当前配置
     console.log(chalk.cyan('当前配置：'));
-    displayInfo('域名/配置名', chalk.green(current.domain));
-    displayInfo('Base URL', current.baseUrl);
+    displayInfo('配置名称', chalk.green(current.name));
+    displayInfo('API 地址', current.baseUrl, '(官方服务)');
     displayInfo('代理', current.proxy, '(无)');
     displayInfo('禁用非必要流量', current.disableNonessentialTraffic ? '是' : '否');
     console.log();
@@ -109,19 +109,19 @@ export class InteractiveUI {
    * 选择 profile
    */
   async selectProfile(profiles: Array<ProfileConfig & { maskedApiKey: string }>): Promise<void> {
-    const { domain } = await prompts({
+    const { name } = await prompts({
       type: 'select',
-      name: 'domain',
+      name: 'name',
       message: '选择配置：',
       choices: profiles.map(p => ({
-        title: `${p.domain} (${p.maskedApiKey})`,
-        value: p.domain,
+        title: `${p.name} (${p.maskedApiKey})`,
+        value: p.name,
       })),
     });
 
-    if (domain) {
-      await this.configManager.setCurrentProfile(domain);
-      displaySuccess(`已切换到：${domain}`);
+    if (name) {
+      await this.configManager.setCurrentProfile(name);
+      displaySuccess(`已切换到：${name}`);
     }
   }
 
@@ -129,12 +129,18 @@ export class InteractiveUI {
    * 创建新 profile
    */
   async createProfile(): Promise<void> {
+    // 显示帮助文案
+    console.log(chalk.gray('\n💡 提示：'));
+    console.log(chalk.gray('  - 配置名称：仅用于区分不同配置（如：官方、公司中转、个人）'));
+    console.log(chalk.gray('  - API 地址：留空则使用 Claude 官方服务\n'));
+
     const answers = await prompts([
       {
         type: 'text',
-        name: 'domain',
-        message: '域名/配置名：',
-        validate: value => value.trim() ? true : '域名不能为空',
+        name: 'name',
+        message: '配置名称：',
+        initial: '官方',
+        validate: value => value.trim() ? true : '配置名称不能为空',
       },
       {
         type: 'password',
@@ -145,7 +151,7 @@ export class InteractiveUI {
       {
         type: 'text',
         name: 'baseUrl',
-        message: 'Base URL (可选，用于中转站)：',
+        message: 'API 地址（可选）：',
       },
       {
         type: 'text',
@@ -166,7 +172,7 @@ export class InteractiveUI {
       },
     ]);
 
-    if (!answers.domain || !answers.apiKey) {
+    if (!answers.name || !answers.apiKey) {
       displayWarning('已取消');
       return;
     }
@@ -193,7 +199,7 @@ export class InteractiveUI {
     }
 
     const profile: DecryptedProfile = {
-      domain: answers.domain,
+      name: answers.name,
       apiKey: answers.apiKey,
       baseUrl: answers.baseUrl || undefined,
       proxy: answers.proxy || undefined,
@@ -203,28 +209,28 @@ export class InteractiveUI {
     };
 
     await this.configManager.saveProfile(profile);
-    await this.configManager.setCurrentProfile(profile.domain);
+    await this.configManager.setCurrentProfile(profile.name);
 
-    displaySuccess(`配置 "${profile.domain}" 已创建并激活`);
+    displaySuccess(`配置 "${profile.name}" 已创建并激活`);
   }
 
   /**
    * 编辑 profile
    */
   async editProfile(profiles: Array<ProfileConfig & { maskedApiKey: string }>): Promise<void> {
-    const { domain } = await prompts({
+    const { name } = await prompts({
       type: 'select',
-      name: 'domain',
+      name: 'name',
       message: '选择要编辑的配置：',
       choices: profiles.map(p => ({
-        title: `${p.domain} (${p.maskedApiKey})`,
-        value: p.domain,
+        title: `${p.name} (${p.maskedApiKey})`,
+        value: p.name,
       })),
     });
 
-    if (!domain) return;
+    if (!name) return;
 
-    const existing = await this.configManager.getProfile(domain);
+    const existing = await this.configManager.getProfile(name);
     if (!existing) return;
 
     const answers = await prompts([
@@ -236,7 +242,7 @@ export class InteractiveUI {
       {
         type: 'text',
         name: 'baseUrl',
-        message: 'Base URL：',
+        message: 'API 地址：',
         initial: existing.baseUrl,
       },
       {
@@ -262,35 +268,35 @@ export class InteractiveUI {
     };
 
     await this.configManager.saveProfile(updated);
-    displaySuccess(`配置 "${domain}" 已更新`);
+    displaySuccess(`配置 "${name}" 已更新`);
   }
 
   /**
    * 删除 profile
    */
   async deleteProfile(profiles: Array<ProfileConfig & { maskedApiKey: string }>): Promise<void> {
-    const { domain } = await prompts({
+    const { name } = await prompts({
       type: 'select',
-      name: 'domain',
+      name: 'name',
       message: '选择要删除的配置：',
       choices: profiles.map(p => ({
-        title: `${p.domain} (${p.maskedApiKey})`,
-        value: p.domain,
+        title: `${p.name} (${p.maskedApiKey})`,
+        value: p.name,
       })),
     });
 
-    if (!domain) return;
+    if (!name) return;
 
     const { confirm } = await prompts({
       type: 'confirm',
       name: 'confirm',
-      message: `确定要删除 "${domain}" 吗？`,
+      message: `确定要删除 "${name}" 吗？`,
       initial: false,
     });
 
     if (confirm) {
-      await this.configManager.deleteProfile(domain);
-      displaySuccess(`配置 "${domain}" 已删除`);
+      await this.configManager.deleteProfile(name);
+      displaySuccess(`配置 "${name}" 已删除`);
     }
   }
 
@@ -309,12 +315,12 @@ export class InteractiveUI {
     }
 
     profiles.forEach(p => {
-      const isCurrent = p.domain === config.currentProfile;
+      const isCurrent = p.name === config.currentProfile;
       const marker = isCurrent ? chalk.green('●') : chalk.gray('○');
 
-      console.log(`${marker} ${chalk.bold(p.domain)}`);
+      console.log(`${marker} ${chalk.bold(p.name)}`);
       displayInfo('API Key', p.maskedApiKey);
-      displayInfo('Base URL', p.baseUrl);
+      displayInfo('API 地址', p.baseUrl, '(官方服务)');
       displayInfo('代理', p.proxy, '(无)');
       displayInfo('禁用非必要流量', p.disableNonessentialTraffic ? '是' : '否');
       console.log();

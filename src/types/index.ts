@@ -6,9 +6,9 @@
 export type EncryptionMode = 'keychain' | 'passphrase';
 
 export interface ProfileConfig {
-  domain: string;
+  name: string;  // 配置名称/别名，用于区分不同配置
   apiKey: string;  // 加密后的 API Key（passphrase 模式）或占位符（keychain 模式）
-  baseUrl?: string;
+  baseUrl?: string;  // API 地址（可选），留空则使用 Claude 官方服务
   proxy?: string;
   disableNonessentialTraffic?: boolean;
   createdAt: number;

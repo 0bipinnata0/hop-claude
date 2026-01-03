@@ -102,7 +102,7 @@ export class ConfigManager {
     // 根据加密模式处理 API Key
     if (mode === 'keychain') {
       // Keychain 模式：存储到 OS 密钥链
-      await this.keychainManager.setAPIKey(profile.domain, profile.apiKey);
+      await this.keychainManager.setAPIKey(profile.name, profile.apiKey);
       // config.json 中存储占位符
       encryptedApiKey = '__KEYCHAIN__';
     } else {
@@ -123,7 +123,7 @@ export class ConfigManager {
       updatedAt: Date.now(),
     };
 
-    const index = config.profiles.findIndex(p => p.domain === profile.domain);
+    const index = config.profiles.findIndex(p => p.name === profile.name);
     if (index >= 0) {
       config.profiles[index] = encryptedProfile;
     } else {
@@ -136,11 +136,11 @@ export class ConfigManager {
 
   /**
    * 获取解密后的 profile
-   * @param domain profile 名称
+   * @param name profile 名称
    */
-  async getProfile(domain: string): Promise<DecryptedProfile | null> {
+  async getProfile(name: string): Promise<DecryptedProfile | null> {
     const config = await this.getConfig();
-    const profile = config.profiles.find(p => p.domain === domain);
+    const profile = config.profiles.find(p => p.name === name);
 
     if (!profile) return null;
 
@@ -150,9 +150,9 @@ export class ConfigManager {
     // 根据加密模式解密 API Key
     if (mode === 'keychain') {
       // Keychain 模式：从 OS 密钥链读取
-      const keychainKey = await this.keychainManager.getAPIKey(domain);
+      const keychainKey = await this.keychainManager.getAPIKey(name);
       if (!keychainKey) {
-        throw new Error(`密钥链中未找到配置 ${domain} 的 API key`);
+        throw new Error(`密钥链中未找到配置 ${name} 的 API key`);
       }
       decryptedApiKey = keychainKey;
     } else {
@@ -176,9 +176,9 @@ export class ConfigManager {
   /**
    * 设置当前激活的 profile
    */
-  async setCurrentProfile(domain: string): Promise<void> {
+  async setCurrentProfile(name: string): Promise<void> {
     const config = await this.getConfig();
-    config.currentProfile = domain;
+    config.currentProfile = name;
     await this.storage.write(config);
   }
 
@@ -205,7 +205,7 @@ export class ConfigManager {
         let decryptedKey: string;
 
         if (mode === 'keychain') {
-          const keychainKey = await this.keychainManager.getAPIKey(p.domain);
+          const keychainKey = await this.keychainManager.getAPIKey(p.name);
           decryptedKey = keychainKey || '';
         } else {
           // Passphrase 模式：使用内置默认密码解密
@@ -239,19 +239,19 @@ export class ConfigManager {
   /**
    * 删除 profile
    */
-  async deleteProfile(domain: string): Promise<void> {
+  async deleteProfile(name: string): Promise<void> {
     const config = await this.getConfig();
     const mode = config.encryptionMode!;
 
     // Keychain 模式下，同时从密钥链中删除
     if (mode === 'keychain') {
-      await this.keychainManager.deleteAPIKey(domain);
+      await this.keychainManager.deleteAPIKey(name);
     }
 
-    config.profiles = config.profiles.filter(p => p.domain !== domain);
+    config.profiles = config.profiles.filter(p => p.name !== name);
 
-    if (config.currentProfile === domain) {
-      config.currentProfile = config.profiles[0]?.domain || '';
+    if (config.currentProfile === name) {
+      config.currentProfile = config.profiles[0]?.name || '';
     }
 
     await this.storage.write(config);
@@ -310,7 +310,7 @@ export class ConfigManager {
     const decryptedProfiles: DecryptedProfile[] = [];
 
     for (const p of config.profiles) {
-      const decrypted = await this.getProfile(p.domain);
+      const decrypted = await this.getProfile(p.name);
       if (decrypted) {
         decryptedProfiles.push(decrypted);
       }
