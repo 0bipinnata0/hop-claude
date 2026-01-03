@@ -131,49 +131,34 @@ export class InteractiveUI {
   async createProfile(): Promise<void> {
     // 显示帮助文案
     console.log(chalk.gray('\n💡 提示：'));
-    console.log(chalk.gray('  - 配置名称：仅用于区分不同配置（如：官方、公司中转、个人）'));
-    console.log(chalk.gray('  - 连接方式：选择使用官方服务还是自定义中转站\n'));
+    console.log(chalk.gray('  - 先选择连接方式：官方服务或自定义中转站'));
+    console.log(chalk.gray('  - 配置名称将根据连接方式自动生成（可修改）\n'));
 
-    // 第一步：基础信息
-    const basicAnswers = await prompts([
-      {
-        type: 'text',
-        name: 'name',
-        message: '配置名称：',
-        initial: '官方',
-        validate: value => value.trim() ? true : '配置名称不能为空',
-      },
-      {
-        type: 'password',
-        name: 'apiKey',
-        message: 'API Key (ANTHROPIC_AUTH_TOKEN)：',
-        validate: value => value.trim() ? true : 'API Key 不能为空',
-      },
-      {
-        type: 'select',
-        name: 'connectionType',
-        message: '连接方式：',
-        choices: [
-          { title: '官方服务', value: 'official' },
-          { title: '自定义中转站', value: 'custom' },
-        ],
-        initial: 0,
-      },
-    ]);
+    // 第一步：连接方式
+    const { connectionType } = await prompts({
+      type: 'select',
+      name: 'connectionType',
+      message: '连接方式：',
+      choices: [
+        { title: '官方服务', value: 'official' },
+        { title: '自定义中转站', value: 'custom' },
+      ],
+      initial: 0,
+    });
 
-    if (!basicAnswers.name || !basicAnswers.apiKey) {
+    if (connectionType === undefined) {
       displayWarning('已取消');
       return;
     }
 
-    // 第二步：如果选择自定义，询问 Base URL
+    // 第二步：如果选择自定义，立即询问 Base URL（同屏效果）
     let baseUrl: string | undefined;
-    if (basicAnswers.connectionType === 'custom') {
+    if (connectionType === 'custom') {
       const { customUrl } = await prompts({
         type: 'text',
         name: 'customUrl',
         message: 'API 地址（中转站 URL）：',
-        validate: value => value.trim() ? true : '自定义模式需要提供 API 地址',
+        validate: value => value.trim() ? true : '请提供 API 地址',
       });
       if (!customUrl) {
         displayWarning('已取消');
@@ -182,7 +167,20 @@ export class InteractiveUI {
       baseUrl = customUrl;
     }
 
-    // 第三步：其他配置
+    // 第三步：API Key
+    const { apiKey } = await prompts({
+      type: 'password',
+      name: 'apiKey',
+      message: 'API Key (ANTHROPIC_AUTH_TOKEN)：',
+      validate: value => value.trim() ? true : 'API Key 不能为空',
+    });
+
+    if (!apiKey) {
+      displayWarning('已取消');
+      return;
+    }
+
+    // 第四步：其他配置
     const extraAnswers = await prompts([
       {
         type: 'text',
@@ -206,7 +204,7 @@ export class InteractiveUI {
     // 验证 API Key（如果用户选择）
     if (extraAnswers.validate) {
       console.log(chalk.gray('正在验证 API Key...'));
-      const result = await validateApiKey(basicAnswers.apiKey, baseUrl);
+      const result = await validateApiKey(apiKey, baseUrl);
       if (!result.valid) {
         displayError(`API Key 验证失败：${result.error}`);
         const { continueAnyway } = await prompts({
@@ -224,10 +222,25 @@ export class InteractiveUI {
       }
     }
 
+    // 第五步：配置名称（根据连接方式自动生成默认值）
+    const defaultName = connectionType === 'official' ? '官方' : '自定义中转';
+    const { name } = await prompts({
+      type: 'text',
+      name: 'name',
+      message: '配置名称（用于区分多个配置）：',
+      initial: defaultName,
+      validate: value => value.trim() ? true : '配置名称不能为空',
+    });
+
+    if (!name) {
+      displayWarning('已取消');
+      return;
+    }
+
     const profile: DecryptedProfile = {
-      name: basicAnswers.name,
-      apiKey: basicAnswers.apiKey,
-      baseUrl: baseUrl,
+      name,
+      apiKey,
+      baseUrl,
       proxy: extraAnswers.proxy || undefined,
       disableNonessentialTraffic: extraAnswers.disableNonessentialTraffic,
       createdAt: Date.now(),
@@ -259,40 +272,42 @@ export class InteractiveUI {
     const existing = await this.configManager.getProfile(name);
     if (!existing) return;
 
-    // 第一步：基础信息
-    const basicAnswers = await prompts([
-      {
-        type: 'password',
-        name: 'apiKey',
-        message: 'API Key (留空保持不变)：',
-      },
-      {
-        type: 'select',
-        name: 'connectionType',
-        message: '连接方式：',
-        choices: [
-          { title: '官方服务', value: 'official' },
-          { title: '自定义中转站', value: 'custom' },
-        ],
-        initial: existing.baseUrl ? 1 : 0,
-      },
-    ]);
+    // 第一步：连接方式
+    const { connectionType } = await prompts({
+      type: 'select',
+      name: 'connectionType',
+      message: '连接方式：',
+      choices: [
+        { title: '官方服务', value: 'official' },
+        { title: '自定义中转站', value: 'custom' },
+      ],
+      initial: existing.baseUrl ? 1 : 0,
+    });
 
-    // 第二步：如果选择自定义，询问 Base URL
+    if (connectionType === undefined) return;
+
+    // 第二步：如果选择自定义，立即询问 Base URL
     let baseUrl: string | undefined;
-    if (basicAnswers.connectionType === 'custom') {
+    if (connectionType === 'custom') {
       const { customUrl } = await prompts({
         type: 'text',
         name: 'customUrl',
         message: 'API 地址（中转站 URL）：',
         initial: existing.baseUrl,
-        validate: value => value.trim() ? true : '自定义模式需要提供 API 地址',
+        validate: value => value.trim() ? true : '请提供 API 地址',
       });
       if (customUrl === undefined) return;
       baseUrl = customUrl;
     }
 
-    // 第三步：其他配置
+    // 第三步：API Key
+    const { apiKey } = await prompts({
+      type: 'password',
+      name: 'apiKey',
+      message: 'API Key (留空保持不变)：',
+    });
+
+    // 第四步：其他配置
     const extraAnswers = await prompts([
       {
         type: 'text',
@@ -310,8 +325,8 @@ export class InteractiveUI {
 
     const updated: DecryptedProfile = {
       ...existing,
-      apiKey: basicAnswers.apiKey || existing.apiKey,
-      baseUrl: baseUrl,
+      apiKey: apiKey || existing.apiKey,
+      baseUrl,
       proxy: extraAnswers.proxy || undefined,
       disableNonessentialTraffic: extraAnswers.disableNonessentialTraffic,
     };
