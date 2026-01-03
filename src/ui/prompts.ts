@@ -152,7 +152,7 @@ export class InteractiveUI {
         return true;
       case 'delete':
         await this.deleteProfile(profiles);
-        return true;
+        return false; // 删除后不启动 Claude
       case 'export':
         await this.exportConfiguration();
         return false; // 导出后不启动 Claude
