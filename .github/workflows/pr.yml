@@ -1,0 +1,52 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type Check
+        run: bun run build
+        continue-on-error: false
+
+      - name: Check for Changeset
+        if: |
+          !contains(github.event.pull_request.labels.*.name, 'skip-changeset') &&
+          !contains(github.event.pull_request.labels.*.name, 'dependencies')
+        run: |
+          if [ -z "$(ls -A .changeset/*.md 2>/dev/null | grep -v README)" ]; then
+            echo "❌ Error: No changeset found!"
+            echo ""
+            echo "Please run 'bunx changeset' to create a changeset for your changes."
+            echo ""
+            echo "If this PR doesn't need a changeset (e.g., docs only), add the 'skip-changeset' label."
+            echo ""
+            echo "📚 See CONTRIBUTING.md for details."
+            exit 1
+          else
+            echo "✅ Changeset found!"
+          fi
