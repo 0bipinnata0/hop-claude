@@ -104,8 +104,11 @@ export async function createCLI() {
 
         // 强制进入配置模式
         if (options.config) {
-          await ui.manageConfiguration();
-          return;
+          const shouldContinue = await ui.manageConfiguration();
+          if (!shouldContinue) {
+            return; // 导入/导出等操作后直接退出
+          }
+          // 如果是其他操作（选择、创建、编辑），继续启动 Claude
         }
 
         // 正常流程：显示当前配置 + 询问是否修改

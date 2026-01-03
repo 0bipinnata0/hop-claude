@@ -14,6 +14,7 @@ export class InteractiveUI {
 
   /**
    * 显示当前配置并询问是否修改
+   * @returns 是否应该继续启动 Claude
    */
   async showCurrentAndAsk(): Promise<boolean> {
     const current = await this.configManager.getCurrentProfile();
@@ -48,7 +49,7 @@ export class InteractiveUI {
     }
 
     if (action === 'modify') {
-      await this.manageConfiguration();
+      return await this.manageConfiguration();
     }
 
     return true;
@@ -56,8 +57,9 @@ export class InteractiveUI {
 
   /**
    * 配置管理主界面
+   * @returns 是否应该继续启动 Claude（导入/导出操作返回 false）
    */
-  async manageConfiguration(): Promise<void> {
+  async manageConfiguration(): Promise<boolean> {
     const profiles = await this.configManager.listProfiles();
 
     const { action } = await prompts({
@@ -78,22 +80,24 @@ export class InteractiveUI {
     switch (action) {
       case 'select':
         await this.selectProfile(profiles);
-        break;
+        return true;
       case 'create':
         await this.createProfile();
-        break;
+        return true;
       case 'edit':
         await this.editProfile(profiles);
-        break;
+        return true;
       case 'delete':
         await this.deleteProfile(profiles);
-        break;
+        return true;
       case 'export':
         await this.exportConfiguration();
-        break;
+        return false; // 导出后不启动 Claude
       case 'import':
         await this.importConfiguration();
-        break;
+        return false; // 导入后不启动 Claude
+      default:
+        return false; // 返回或取消时不启动 Claude
     }
   }
 
