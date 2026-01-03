@@ -26,6 +26,8 @@
   ],
   "scripts": {
     "build": "tsc",
+    "build:watch": "tsc --watch",
+    "typecheck": "tsc --noEmit",
     "dev": "bun run src/index.ts",
     "prepublishOnly": "npm run build",
     "release": "changeset publish"
