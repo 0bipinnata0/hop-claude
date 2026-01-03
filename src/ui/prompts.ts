@@ -21,27 +21,31 @@ export class InteractiveUI {
 
     displayTitle('🔧 Claude Code 配置管理工具');
 
-    if (current) {
-      console.log(chalk.cyan('当前配置：'));
-      displayInfo('域名/配置名', chalk.green(current.domain));
-      displayInfo('Base URL', current.baseUrl);
-      displayInfo('代理', current.proxy, '(无)');
-      displayInfo('禁用非必要流量', current.disableNonessentialTraffic ? '是' : '否');
-      console.log();
-    } else {
-      displayWarning('尚未配置。\n');
+    // 如果没有配置，直接进入创建流程
+    if (!current) {
+      displayWarning('尚未配置。现在创建第一个配置：\n');
+      await this.createProfile();
+      return true;
     }
+
+    // 有配置时显示当前配置
+    console.log(chalk.cyan('当前配置：'));
+    displayInfo('域名/配置名', chalk.green(current.domain));
+    displayInfo('Base URL', current.baseUrl);
+    displayInfo('代理', current.proxy, '(无)');
+    displayInfo('禁用非必要流量', current.disableNonessentialTraffic ? '是' : '否');
+    console.log();
 
     const { action } = await prompts({
       type: 'select',
       name: 'action',
       message: '请选择操作：',
       choices: [
-        { title: '使用当前配置继续', value: 'continue', disabled: !current },
+        { title: '使用当前配置继续', value: 'continue' },
         { title: '修改配置', value: 'modify' },
         { title: '退出', value: 'exit' },
       ],
-      initial: current ? 0 : 1,
+      initial: 0,
     });
 
     if (action === 'exit' || action === undefined) {
