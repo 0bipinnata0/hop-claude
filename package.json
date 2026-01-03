@@ -1,0 +1,54 @@
+{
+  "name": "hop-claude",
+  "version": "1.0.0",
+  "description": "Claude Code configuration manager and launcher",
+  "keywords": [
+    "claude",
+    "anthropic",
+    "cli",
+    "proxy",
+    "config"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "hop-claude": "bin/cli.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "bun run src/index.ts",
+    "prepublishOnly": "npm run build",
+    "release": "changeset publish"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^14.0.2",
+    "keytar": "^7.9.0",
+    "prompts": "^2.4.2",
+    "proper-lockfile": "^4.1.2",
+    "which": "^6.0.0"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.8",
+    "@types/bun": "latest",
+    "@types/node": "^25.0.3",
+    "@types/prompts": "^2.4.9",
+    "@types/proper-lockfile": "^4.1.4",
+    "@types/which": "^3.0.4",
+    "bun-types": "^1.3.5",
+    "typescript": "^5.9.3"
+  }
+}
