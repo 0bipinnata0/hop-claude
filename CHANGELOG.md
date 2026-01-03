@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.2.1
+
+### Patch Changes
+
+- 修复 Commander.js 参数解析错误
+
+  **修正**：
+
+  - 修复 `hop-claude -c` 报错 "error: too many arguments. Expected 0 arguments but got 1."
+  - 添加 `.arguments('[args...]')` 到 Commander 配置以支持额外参数
+  - 更新 action 回调签名以匹配新的参数结构
+
+  **根本原因**：
+
+  - Commander.js 虽然配置了 `.allowUnknownOption(true)` 允许未知选项
+  - 但缺少 `.arguments('[args...]')` 来接受 positional arguments
+  - 导致 Commander 在解析阶段就拒绝透传参数，代码逻辑无法运行
+
+  **影响**：
+
+  - 修复前：所有参数透传命令（如 `hop-claude -c`, `hop-claude -r "test"`）都会失败
+  - 修复后：参数正常透传给 Claude CLI，智能检测模式正常工作
+
 ## 3.2.0
 
 ### Minor Changes
