@@ -306,7 +306,7 @@ export class ConfigManager {
       return; // 无需切换
     }
 
-    // 读取所有 profiles 的明文 API Keys
+    // 步骤 1: 读取所有 profiles 的明文 API Keys
     const decryptedProfiles: DecryptedProfile[] = [];
 
     for (const p of config.profiles) {
@@ -316,26 +316,73 @@ export class ConfigManager {
       }
     }
 
-    // 更新加密模式
-    config.encryptionMode = newMode;
+    // 步骤 2: 创建新配置（包含所有 profiles）
+    const newConfig: ConfigStore = {
+      ...config,
+      encryptionMode: newMode,
+      encryptionSalt: newMode === 'passphrase'
+        ? (config.encryptionSalt || this.passphraseEncryption.generateSalt())
+        : undefined,
+      profiles: [],
+    };
 
-    // 如果切换到 passphrase 模式，可能需要新的 salt
-    if (newMode === 'passphrase' && !config.encryptionSalt) {
-      config.encryptionSalt = this.passphraseEncryption.generateSalt();
-    }
-
-    // 清空旧的 profiles
-    config.profiles = [];
-    await this.storage.write(config);
-
-    // 使用新模式重新保存所有 profiles
+    // 步骤 3: 将所有 profiles 使用新加密模式加密
     for (const profile of decryptedProfiles) {
-      await this.saveProfile(profile);
+      let encryptedApiKey: string;
+
+      if (newMode === 'keychain') {
+        // Keychain 模式：存储到 OS 密钥链
+        await this.keychainManager.setAPIKey(profile.name, profile.apiKey);
+        encryptedApiKey = '__KEYCHAIN__';
+      } else {
+        // Passphrase 模式：使用内置默认密码加密
+        if (!newConfig.encryptionSalt) {
+          newConfig.encryptionSalt = this.passphraseEncryption.generateSalt();
+        }
+        encryptedApiKey = this.passphraseEncryption.encrypt(
+          profile.apiKey,
+          DEFAULT_PASSPHRASE,
+          newConfig.encryptionSalt
+        );
+      }
+
+      const encryptedProfile: ProfileConfig = {
+        ...profile,
+        apiKey: encryptedApiKey,
+        updatedAt: Date.now(),
+      };
+
+      newConfig.profiles.push(encryptedProfile);
     }
 
-    // 如果从 keychain 切换出去，清理密钥链
-    if (oldMode === 'keychain') {
-      await this.keychainManager.clearAll();
+    // 步骤 4: 使用原子性写入（临时文件 + rename）
+    const fs = await import('fs/promises');
+    const configPath = this.storage.getConfigPath();
+    const tempPath = `${configPath}.tmp`;
+
+    try {
+      // 4.1: 写入临时文件
+      await fs.writeFile(
+        tempPath,
+        JSON.stringify(newConfig, null, 2),
+        'utf8'
+      );
+
+      // 4.2: 原子性替换（rename 是原子操作）
+      await fs.rename(tempPath, configPath);
+
+      // 步骤 5: 清理旧密钥链（在成功写入后）
+      if (oldMode === 'keychain' && newMode !== 'keychain') {
+        await this.keychainManager.clearAll();
+      }
+    } catch (error) {
+      // 清理临时文件（如果存在）
+      try {
+        await fs.unlink(tempPath);
+      } catch {
+        // 忽略删除失败
+      }
+      throw error;
     }
   }
 
