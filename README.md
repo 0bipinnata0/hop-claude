@@ -21,6 +21,7 @@ Claude Code 配置管理工具 - 轻松管理多个 Claude Code 中转站配置
 - 自动密码提示，更友好的交互体验
 - 导入/导出操作后不再自动启动 Claude
 - `-s` 不提供配置名时显示交互式选择列表
+- **智能交互模式**：有透传参数时自动静默启动，无参数时显示配置界面
 
 📖 **建议操作**：
 ```bash
@@ -29,6 +30,9 @@ hop-claude --encryption-info
 
 # 首次使用会自动引导配置
 hop-claude
+
+# 快速启动（静默模式）
+hop-claude -c
 ```
 
 详情查看 [SECURITY.md](./SECURITY.md)
@@ -48,6 +52,7 @@ hop-claude
 - 🚀 **自动启动 Claude** - 应用配置后自动启动 Claude CLI
 - 🛡️ **安全防护** - 防命令注入、并发写保护、权限控制
 - 🔄 **参数透传** - 支持 `-c` 和 `--` 分隔符透传参数给 Claude
+- 🧠 **智能交互模式** - 自动检测透传参数，静默或交互式启动
 
 ## 安装
 
@@ -134,16 +139,18 @@ hop-claude
 
 ### 透传参数给 Claude
 
-支持两种方式透传参数：
+**智能检测模式**：hop-claude 会自动检测是否有透传参数：
+- 有透传参数 → 静默启动：直接使用当前配置启动 Claude，无交互
+- 无透传参数 → 交互模式：显示配置管理界面
 
 #### 方式 1：直接透传（推荐）
 
 ```bash
 # -c 现在可以直接透传给 Claude（继续上次对话）
-hop-claude -c
+hop-claude -c                      # 静默启动，不显示配置界面
 
 # 透传其他参数
-hop-claude -r "Explain this code"
+hop-claude -r "Explain this code"  # 静默启动，传入 -r 参数
 ```
 
 #### 方式 2：使用 -- 分隔符（更明确）
@@ -154,6 +161,15 @@ hop-claude -- -c
 
 # 切换配置后透传参数
 hop-claude -s production -- -c --verbose
+```
+
+#### 交互模式
+
+如果不提供任何透传参数，会显示配置管理界面：
+
+```bash
+hop-claude          # 显示当前配置，询问是否修改
+hop-claude -m       # 进入配置管理模式
 ```
 
 ## 命令参考
@@ -257,18 +273,21 @@ hop-claude -e my-backup.json
 hop-claude -i my-backup.json
 ```
 
-### 场景 3：继续上次对话
+### 场景 3：继续上次对话（静默模式）
 
 ```bash
-# 方式 1：直接透传 -c
-hop-claude -c
+# 方式 1：直接透传 -c（推荐）
+hop-claude -c                # 静默启动，直接继续对话，无交互
 
 # 方式 2：使用 -- 分隔符（更明确）
 hop-claude -- -c
 
 # 切换配置后继续对话
-hop-claude -s production -c
+hop-claude -s production -c  # 切换后静默启动
 hop-claude -s production -- -c
+
+# 传入其他参数
+hop-claude -r "解释这段代码"  # 静默启动，传入 -r 参数
 ```
 
 ## 安全说明
@@ -543,11 +562,13 @@ hop-claude/
 - ✅ 自动密码提示（密码加密模式）
 - ✅ 支持空密码快速启动
 - ✅ 导入/导出后不再自动启动 Claude
+- ✅ **智能交互模式检测**：有透传参数时自动静默启动，无参数时显示配置界面
 
 **改进**：
 - ✅ 更友好的密码输入体验（先尝试空密码）
 - ✅ 简化加密模式选择（只有两种模式）
 - ✅ 更清晰的用户界面和错误提示
+- ✅ 优化参数透传逻辑，更符合用户直觉
 
 ### v0.1.0（2025-01-03）
 

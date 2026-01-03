@@ -108,10 +108,37 @@ export async function createCLI() {
           if (!shouldContinue) {
             return; // 导入/导出等操作后直接退出
           }
+
           // 如果是其他操作（选择、创建、编辑），继续启动 Claude
+          const claudeArgs = getClaudeArgs(process.argv);
+          const currentProfile = await configManager.getCurrentProfile();
+
+          if (currentProfile) {
+            await launchClaude(currentProfile, claudeArgs);
+          }
+          return;
         }
 
-        // 正常流程：显示当前配置 + 询问是否修改
+        // 获取透传参数（提前检测）
+        const claudeArgs = getClaudeArgs(process.argv);
+
+        // 智能检测模式：
+        // - 有透传参数 → 静默模式：直接启动 Claude
+        // - 无透传参数 → 交互模式：显示配置管理界面
+        if (claudeArgs.length > 0) {
+          // 静默模式：直接使用当前配置启动
+          const currentProfile = await configManager.getCurrentProfile();
+
+          if (!currentProfile) {
+            displayError('未找到配置。请先运行 hop-claude 创建配置');
+            process.exit(1);
+          }
+
+          await launchClaude(currentProfile, claudeArgs);
+          return;
+        }
+
+        // 交互模式：显示当前配置 + 询问是否修改
         const shouldContinue = await ui.showCurrentAndAsk();
 
         if (!shouldContinue) {
@@ -127,11 +154,8 @@ export async function createCLI() {
           process.exit(1);
         }
 
-        // 获取透传参数
-        const claudeArgs = getClaudeArgs(process.argv);
-
-        // 启动 claude
-        await launchClaude(currentProfile, claudeArgs);
+        // 启动 claude（无透传参数）
+        await launchClaude(currentProfile, []);
 
       } catch (error: unknown) {
         const err = error instanceof Error ? error : new Error(String(error));
