@@ -36,7 +36,8 @@ jobs:
       - name: Check for Changeset
         if: |
           !contains(github.event.pull_request.labels.*.name, 'skip-changeset') &&
-          !contains(github.event.pull_request.labels.*.name, 'dependencies')
+          !contains(github.event.pull_request.labels.*.name, 'dependencies') &&
+          github.event.pull_request.user.login != 'github-actions[bot]'
         run: |
           if [ -z "$(ls -A .changeset/*.md 2>/dev/null | grep -v README)" ]; then
             echo "❌ Error: No changeset found!"
