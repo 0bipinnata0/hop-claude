@@ -18,14 +18,14 @@ export async function createCLI() {
   program
     .name('hop-claude')
     .version(pkg.version)
-    .description('Claude Code configuration manager and launcher')
-    .option('-c, --config', 'Enter configuration management mode')
-    .option('-l, --list', 'List all configurations')
-    .option('-s, --switch <profile>', 'Switch to a specific profile')
-    .option('-e, --export <file>', 'Export configuration to file')
-    .option('-i, --import <file>', 'Import configuration from file')
-    .option('--migrate-encryption', 'Migrate to a different encryption mode')
-    .option('--encryption-info', 'Show current encryption mode information')
+    .description('Claude Code 配置管理和启动工具')
+    .option('-c, --config', '进入配置管理模式')
+    .option('-l, --list', '列出所有配置')
+    .option('-s, --switch [profile]', '切换到指定配置（不提供名称则显示选择列表）')
+    .option('-e, --export <file>', '导出配置到文件')
+    .option('-i, --import <file>', '从文件导入配置')
+    .option('--migrate-encryption', '迁移到不同的加密模式')
+    .option('--encryption-info', '显示当前加密模式信息')
     .allowUnknownOption(true) // 允许未知选项（用于透传给 claude）
     .action(async (options) => {
       try {
@@ -49,19 +49,41 @@ export async function createCLI() {
         }
 
         // 快速切换 profile
-        if (options.switch) {
-          const profile = await configManager.getProfile(options.switch);
-          if (!profile) {
-            displayError(`Profile "${options.switch}" not found`);
+        if (options.switch !== undefined) {
+          // 如果提供了配置名称，直接切换
+          if (typeof options.switch === 'string' && options.switch.trim()) {
+            const profile = await configManager.getProfile(options.switch);
+            if (!profile) {
+              displayError(`未找到配置 "${options.switch}"`);
+              process.exit(1);
+            }
+            await configManager.setCurrentProfile(options.switch);
+            displaySuccess(`已切换到：${options.switch}`);
+
+            // 如果有透传参数，继续启动 claude
+            const claudeArgs = getClaudeArgs(process.argv);
+            if (claudeArgs.length > 0) {
+              await launchClaude(profile, claudeArgs);
+            }
+            return;
+          }
+
+          // 如果没有提供配置名称，显示交互式选择列表
+          const profiles = await configManager.listProfiles();
+          if (profiles.length === 0) {
+            displayError('没有可用的配置');
             process.exit(1);
           }
-          await configManager.setCurrentProfile(options.switch);
-          displaySuccess(`Switched to: ${options.switch}`);
+
+          await ui.selectProfile(profiles);
 
           // 如果有透传参数，继续启动 claude
           const claudeArgs = getClaudeArgs(process.argv);
           if (claudeArgs.length > 0) {
-            await launchClaude(profile, claudeArgs);
+            const currentProfile = await configManager.getCurrentProfile();
+            if (currentProfile) {
+              await launchClaude(currentProfile, claudeArgs);
+            }
           }
           return;
         }
@@ -69,14 +91,14 @@ export async function createCLI() {
         // 导出配置
         if (options.export) {
           await backupConfig(configManager, options.export);
-          displaySuccess(`Configuration exported to: ${options.export}`);
+          displaySuccess(`配置已导出到：${options.export}`);
           return;
         }
 
         // 导入配置
         if (options.import) {
           await restoreConfig(configManager, options.import);
-          displaySuccess('Configuration imported successfully');
+          displaySuccess('配置导入成功');
           return;
         }
 
@@ -98,7 +120,7 @@ export async function createCLI() {
         const currentProfile = await configManager.getCurrentProfile();
 
         if (!currentProfile) {
-          displayError('No configuration selected');
+          displayError('未选择配置');
           process.exit(1);
         }
 
@@ -114,7 +136,7 @@ export async function createCLI() {
 
         // 在 DEBUG 模式下显示完整的堆栈跟踪
         if (process.env.DEBUG) {
-          console.error('\nStack trace:');
+          console.error('\n堆栈跟踪：');
           console.error(err.stack);
         }
 
