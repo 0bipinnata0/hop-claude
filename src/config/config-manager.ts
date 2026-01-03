@@ -4,6 +4,12 @@ import { KeychainManager } from './keychain.js';
 import type { ConfigStore, ProfileConfig, DecryptedProfile, EncryptionMode } from '../types/index.js';
 
 /**
+ * 内置默认密码（用于密码加密模式）
+ * 用户无需记住，系统自动使用
+ */
+const DEFAULT_PASSPHRASE = 'hop-claude-default-encryption-key-2025';
+
+/**
  * 配置管理核心类
  * 支持两种加密模式：
  * - keychain: OS 密钥链存储（推荐）
@@ -14,27 +20,10 @@ export class ConfigManager {
   private passphraseEncryption: PassphraseEncryption;
   private keychainManager: KeychainManager;
 
-  // 用于临时存储用户输入的 passphrase（仅在当前会话有效）
-  private sessionPassphrase?: string;
-
   constructor() {
     this.storage = new ConfigStorage();
     this.passphraseEncryption = new PassphraseEncryption();
     this.keychainManager = new KeychainManager();
-  }
-
-  /**
-   * 设置会话密码（用于 passphrase 模式）
-   */
-  setSessionPassphrase(passphrase: string): void {
-    this.sessionPassphrase = passphrase;
-  }
-
-  /**
-   * 清除会话密码
-   */
-  clearSessionPassphrase(): void {
-    this.sessionPassphrase = undefined;
   }
 
   /**
@@ -99,9 +88,8 @@ export class ConfigManager {
   /**
    * 添加或更新 profile
    * @param profile 解密后的 profile
-   * @param passphrase 密码（仅 passphrase 模式需要）
    */
-  async saveProfile(profile: DecryptedProfile, passphrase?: string): Promise<void> {
+  async saveProfile(profile: DecryptedProfile): Promise<void> {
     const config = await this.getConfig();
     const mode = config.encryptionMode!;
 
@@ -118,17 +106,13 @@ export class ConfigManager {
       // config.json 中存储占位符
       encryptedApiKey = '__KEYCHAIN__';
     } else {
-      // Passphrase 模式：使用用户密码加密
-      const pwd = passphrase || this.sessionPassphrase;
-      if (!pwd && pwd !== '') {
-        throw new Error('需要密码来加密 API Key');
-      }
+      // Passphrase 模式：使用内置默认密码加密
       if (!config.encryptionSalt) {
         config.encryptionSalt = this.passphraseEncryption.generateSalt();
       }
       encryptedApiKey = this.passphraseEncryption.encrypt(
         profile.apiKey,
-        pwd,
+        DEFAULT_PASSPHRASE,
         config.encryptionSalt
       );
     }
@@ -153,9 +137,8 @@ export class ConfigManager {
   /**
    * 获取解密后的 profile
    * @param domain profile 名称
-   * @param passphrase 密码（仅 passphrase 模式需要）
    */
-  async getProfile(domain: string, passphrase?: string): Promise<DecryptedProfile | null> {
+  async getProfile(domain: string): Promise<DecryptedProfile | null> {
     const config = await this.getConfig();
     const profile = config.profiles.find(p => p.domain === domain);
 
@@ -173,17 +156,13 @@ export class ConfigManager {
       }
       decryptedApiKey = keychainKey;
     } else {
-      // Passphrase 模式：使用用户密码解密
-      const pwd = passphrase || this.sessionPassphrase;
-      if (!pwd && pwd !== '') {
-        throw new Error('需要密码来解密 API key');
-      }
+      // Passphrase 模式：使用内置默认密码解密
       if (!config.encryptionSalt) {
         throw new Error('未找到加密 salt');
       }
       decryptedApiKey = this.passphraseEncryption.decrypt(
         profile.apiKey,
-        pwd,
+        DEFAULT_PASSPHRASE,
         config.encryptionSalt
       );
     }
@@ -205,19 +184,17 @@ export class ConfigManager {
 
   /**
    * 获取当前激活的 profile
-   * @param passphrase 密码（仅 passphrase 模式需要）
    */
-  async getCurrentProfile(passphrase?: string): Promise<DecryptedProfile | null> {
+  async getCurrentProfile(): Promise<DecryptedProfile | null> {
     const config = await this.getConfig();
     if (!config.currentProfile) return null;
-    return await this.getProfile(config.currentProfile, passphrase);
+    return await this.getProfile(config.currentProfile);
   }
 
   /**
    * 列出所有 profiles（API Key 部分隐藏）
-   * @param passphrase 密码（仅 passphrase 模式需要）
    */
-  async listProfiles(passphrase?: string): Promise<Array<ProfileConfig & { maskedApiKey: string }>> {
+  async listProfiles(): Promise<Array<ProfileConfig & { maskedApiKey: string }>> {
     const config = await this.getConfig();
     const mode = config.encryptionMode!;
 
@@ -231,16 +208,13 @@ export class ConfigManager {
           const keychainKey = await this.keychainManager.getAPIKey(p.domain);
           decryptedKey = keychainKey || '';
         } else {
-          // Passphrase 模式
-          const pwd = passphrase || this.sessionPassphrase;
-          if (!pwd && pwd !== '') {
-            decryptedKey = '';
-          } else if (!config.encryptionSalt) {
+          // Passphrase 模式：使用内置默认密码解密
+          if (!config.encryptionSalt) {
             decryptedKey = '';
           } else {
             decryptedKey = this.passphraseEncryption.decrypt(
               p.apiKey,
-              pwd,
+              DEFAULT_PASSPHRASE,
               config.encryptionSalt
             );
           }
@@ -321,11 +295,9 @@ export class ConfigManager {
   /**
    * 切换加密模式（需要提供所有必要的凭据）
    * @param newMode 新的加密模式
-   * @param passphrase 密码（切换到 passphrase 模式时需要）
    */
   async switchEncryptionMode(
-    newMode: EncryptionMode,
-    passphrase?: string
+    newMode: EncryptionMode
   ): Promise<void> {
     const config = await this.getConfig();
     const oldMode = config.encryptionMode!;
@@ -338,7 +310,7 @@ export class ConfigManager {
     const decryptedProfiles: DecryptedProfile[] = [];
 
     for (const p of config.profiles) {
-      const decrypted = await this.getProfile(p.domain, passphrase);
+      const decrypted = await this.getProfile(p.domain);
       if (decrypted) {
         decryptedProfiles.push(decrypted);
       }
@@ -358,7 +330,7 @@ export class ConfigManager {
 
     // 使用新模式重新保存所有 profiles
     for (const profile of decryptedProfiles) {
-      await this.saveProfile(profile, passphrase);
+      await this.saveProfile(profile);
     }
 
     // 如果从 keychain 切换出去，清理密钥链

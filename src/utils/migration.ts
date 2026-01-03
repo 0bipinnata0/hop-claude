@@ -45,7 +45,7 @@ export class EncryptionMigration {
     choices.push({
       title: '密码加密',
       value: 'passphrase',
-      description: '使用密码加密 - 可跨机器移植，每次需要输入密码',
+      description: '使用内置密码自动加密 - 可跨机器移植，无需手动输入密码',
     });
 
     const { newMode } = await prompts({
@@ -63,76 +63,6 @@ export class EncryptionMigration {
     if (newMode === currentMode) {
       displayMessage('已在使用此模式，无需迁移。');
       return;
-    }
-
-    // 如果当前模式是密码模式，需要密码来解密
-    let currentPassphrase: string | undefined;
-    if (currentMode === 'passphrase') {
-      // 先尝试空密码
-      this.configManager.setSessionPassphrase('');
-
-      // 验证空密码是否可以解密
-      try {
-        const config = await this.configManager.getConfig();
-        if (config.profiles.length > 0) {
-          // 尝试解密第一个配置来验证密码
-          await this.configManager.getProfile(config.profiles[0].domain, '');
-        }
-        // 空密码可用
-        currentPassphrase = '';
-      } catch {
-        // 空密码失败，提示输入
-        this.configManager.clearSessionPassphrase();
-
-        const { currentPwd } = await prompts({
-          type: 'password',
-          name: 'currentPwd',
-          message: '输入当前密码以解密配置：',
-          validate: (value: string) =>
-            value.trim() !== '' ? true : '密码不能为空',
-        });
-
-        if (!currentPwd) {
-          displayWarning('已取消迁移');
-          return;
-        }
-
-        currentPassphrase = currentPwd as string;
-        this.configManager.setSessionPassphrase(currentPassphrase);
-      }
-    }
-
-    // 如果选择密码模式，需要输入新密码
-    let newPassphrase: string | undefined;
-    if (newMode === 'passphrase') {
-      const { pwd1 } = await prompts({
-        type: 'password',
-        name: 'pwd1',
-        message: '输入新密码用于加密（直接回车使用空密码）：',
-        validate: (value: string) =>
-          value.length === 0 || value.length >= 8 ? true : '密码至少需要 8 个字符',
-      });
-
-      if (pwd1 === undefined) {
-        displayWarning('已取消迁移');
-        return;
-      }
-
-      // 如果不是空密码，需要确认
-      if (pwd1.length > 0) {
-        const { pwd2 } = await prompts({
-          type: 'password',
-          name: 'pwd2',
-          message: '确认新密码：',
-        });
-
-        if (pwd1 !== pwd2) {
-          displayError('两次密码输入不一致');
-          return;
-        }
-      }
-
-      newPassphrase = pwd1;
     }
 
     // 确认迁移
@@ -161,7 +91,7 @@ export class EncryptionMigration {
       displayMessage('\n正在迁移加密模式...');
 
       // 执行迁移
-      await this.configManager.switchEncryptionMode(newMode, newPassphrase);
+      await this.configManager.switchEncryptionMode(newMode);
 
       displaySuccess(`\n迁移完成！`);
       displayMessage(`\n加密模式已更改：${currentMode} → ${newMode}`);
@@ -170,16 +100,8 @@ export class EncryptionMigration {
         displayMessage('\n您的 API 密钥现在存储在系统 keychain 中。');
         displayMessage('配置文件仅包含非敏感数据。');
       } else if (newMode === 'passphrase') {
-        if (newPassphrase && newPassphrase.length > 0) {
-          displayWarning('\n重要：请记住您的密码！');
-          displayWarning('每次使用 hop-claude 时都需要输入密码。');
-        } else {
-          displayMessage('\n您使用了空密码加密。');
-          displayMessage('每次启动将自动使用空密码解密。');
-        }
-        if (newPassphrase !== undefined) {
-          this.configManager.setSessionPassphrase(newPassphrase);
-        }
+        displayMessage('\n您的 API 密钥现在使用内置密码加密。');
+        displayMessage('配置完全可移植，可跨机器导入/导出。');
       }
 
       displayMessage(`\n备份文件：${backupPath}`);
@@ -220,9 +142,9 @@ export class EncryptionMigration {
 
       case 'passphrase':
         displayMessage('\n密码加密模式：');
-        displayMessage('  - 使用密码加密密钥');
+        displayMessage('  - 使用内置密码自动加密密钥');
         displayMessage('  - 完全可跨机器移植');
-        displayMessage('  - 每次操作需要输入密码');
+        displayMessage('  - 无需手动输入密码');
         break;
     }
 
