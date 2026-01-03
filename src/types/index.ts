@@ -2,7 +2,7 @@
  * 加密模式
  * - legacy: 旧版机器绑定加密（已弃用，但保持向后兼容）
  * - keychain: OS 密钥链存储（推荐，最安全）
- * - passphrase: 用户密码加密（可移植）
+ * - passphrase: 密码加密（可移植）
  */
 export type EncryptionMode = 'legacy' | 'keychain' | 'passphrase';
 
