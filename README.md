@@ -2,27 +2,33 @@
 
 Claude Code 配置管理工具 - 轻松管理多个 Claude Code 中转站配置
 
-## ⚠️ 重要更新 v0.1.0
+## ⚠️ 重要更新 v2.0.0
 
-**安全更新和新功能**（2025-01-03）：
+**重大更新**（2025-01-03）：
 
-🔒 **关键安全修复**：
-- 修复命令注入漏洞（CRITICAL）
-- 新增文件锁防止并发写入损坏
-- 改进 Windows 二进制检测
+🔒 **移除 Legacy 加密模式**：
+- 完全移除不安全的 Legacy 加密模式
+- 现在只支持 Keychain 和密码加密两种模式
+- 新安装自动选择最佳加密模式
 
-🆕 **新增加密模式**：
-- **Keychain 模式**（推荐）：使用 OS keychain 存储，最高安全性
-- **Passphrase 模式**：支持跨机器迁移的密码加密
-- **迁移工具**：从 v0.0.x Legacy 模式轻松迁移
+⚠️ **破坏性变更**：
+- `-c/--config` 参数更改为 `-m/--manage`
+- `-c` 现在可以透传给 Claude CLI（用于继续上次对话）
+- 支持 `--` 分隔符来明确区分参数
+
+✨ **新功能和改进**：
+- 支持空密码快速启动（密码加密模式）
+- 自动密码提示，更友好的交互体验
+- 导入/导出操作后不再自动启动 Claude
+- `-s` 不提供配置名时显示交互式选择列表
 
 📖 **建议操作**：
 ```bash
 # 查看当前加密模式
 hop-claude --encryption-info
 
-# 如果使用 Legacy 模式，建议迁移
-hop-claude --migrate-encryption
+# 首次使用会自动引导配置
+hop-claude
 ```
 
 详情查看 [SECURITY.md](./SECURITY.md)
@@ -31,7 +37,7 @@ hop-claude --migrate-encryption
 
 ## 特性
 
-- 🔐 **多模式加密存储** - 支持 Keychain（OS 管理）、Passphrase（可移植）、Legacy（兼容）三种加密模式
+- 🔐 **双模式加密存储** - Keychain（OS 管理）和密码加密（可移植）两种模式
 - 🔒 **OS Keychain 集成** - macOS Keychain、Windows Credential Manager、Linux libsecret 硬件级安全
 - 🔄 **多配置管理** - 支持多个配置 profile，按 domain 区分
 - 🎯 **交互式界面** - 友好的命令行交互体验
@@ -41,7 +47,7 @@ hop-claude --migrate-encryption
 - ✅ **API Key 验证** - 可选的 API Key 有效性验证
 - 🚀 **自动启动 Claude** - 应用配置后自动启动 Claude CLI
 - 🛡️ **安全防护** - 防命令注入、并发写保护、权限控制
-- 🔄 **加密模式迁移** - 轻松在不同加密模式间迁移
+- 🔄 **参数透传** - 支持 `-c` 和 `--` 分隔符透传参数给 Claude
 
 ## 安装
 
@@ -65,7 +71,7 @@ npx hop-claude --help
 npx hop-claude --list
 
 # 配置管理
-npx hop-claude --config
+npx hop-claude --manage
 
 # 快速切换并启动
 npx hop-claude -s production
@@ -108,10 +114,15 @@ hop-claude
 按照提示创建你的第一个配置：
 
 1. 输入 Domain/Profile 名称（如：production, dev）
-2. 输入 API Key
-3. 输入 Base URL（可选，用于中转站）
+2. 输入 API Key（对应环境变量 ANTHROPIC_AUTH_TOKEN）
+3. 输入 Base URL（可选，用于中转站，对应 ANTHROPIC_BASE_URL）
 4. 输入 Proxy（可选）
 5. 选择是否禁用非必要流量
+
+**密码加密模式用户**：
+- 创建配置时可以直接回车使用空密码（快速启动）
+- 也可以设置密码保护（推荐 ≥8 字符）
+- 启动时自动尝试空密码，失败才提示输入
 
 ### 使用现有配置启动 Claude
 
@@ -123,14 +134,26 @@ hop-claude
 
 ### 透传参数给 Claude
 
-所有 hop-claude 未识别的参数都会透传给 Claude CLI：
+支持两种方式透传参数：
+
+#### 方式 1：直接透传（推荐）
 
 ```bash
-# 使用当前配置启动 Claude 并透传参数
-hop-claude -r "Explain this code"
+# -c 现在可以直接透传给 Claude（继续上次对话）
+hop-claude -c
 
-# 快速切换配置并启动
-hop-claude -s production -r "Deploy to production"
+# 透传其他参数
+hop-claude -r "Explain this code"
+```
+
+#### 方式 2：使用 -- 分隔符（更明确）
+
+```bash
+# 使用 -- 明确分隔 hop-claude 参数和 Claude 参数
+hop-claude -- -c
+
+# 切换配置后透传参数
+hop-claude -s production -- -c --verbose
 ```
 
 ## 命令参考
@@ -146,9 +169,12 @@ hop-claude --version          # 显示版本号
 ### 配置管理
 
 ```bash
-hop-claude --config           # 进入配置管理界面
-hop-claude --list             # 列出所有配置
+hop-claude -m                 # 进入配置管理界面（原 -c）
+hop-claude --manage           # 同上（长选项）
+hop-claude -l                 # 列出所有配置
+hop-claude --list             # 同上（长选项）
 hop-claude -s <profile>       # 快速切换到指定配置
+hop-claude -s                 # 不提供名称时显示交互式选择列表
 ```
 
 ### 配置导入/导出
@@ -157,6 +183,8 @@ hop-claude -s <profile>       # 快速切换到指定配置
 hop-claude -e backup.json     # 导出配置到文件
 hop-claude -i backup.json     # 从文件导入配置
 ```
+
+**注意**：导入/导出操作完成后会直接退出，不再启动 Claude。
 
 ### 加密模式管理
 
@@ -171,27 +199,26 @@ hop-claude --migrate-encryption  # 迁移到不同的加密模式
   - macOS: Keychain Access
   - Windows: Credential Manager
   - Linux: libsecret
+  - 无需记住密码
+  - **限制**：不可跨机器迁移
 
-- **Passphrase 模式**：使用用户密码加密，支持跨机器迁移
+- **密码加密模式**：使用密码加密，支持跨机器迁移
   - AES-256-GCM 加密
   - PBKDF2 密钥派生（100,000 次迭代）
-  - 需要记住密码
-
-- **Legacy 模式**（已弃用）：基于机器信息的加密，向后兼容 v0.0.x
-  - 不推荐新用户使用
-  - 建议迁移到 Keychain 或 Passphrase 模式
+  - 支持空密码快速启动
+  - 完全可移植跨机器
 
 ## 配置项说明
 
 每个配置 profile 包含以下信息：
 
-| 配置项 | 说明 | 必填 |
-|--------|------|------|
-| Domain | 配置名称/标识 | ✅ |
-| API Key | Anthropic API 密钥 | ✅ |
-| Base URL | 自定义 API 地址（中转站） | ❌ |
-| Proxy | HTTP/HTTPS 代理 | ❌ |
-| Disable Nonessential Traffic | 是否禁用非必要流量 | ❌ |
+| 配置项 | 说明 | 对应环境变量 | 必填 |
+|--------|------|-------------|------|
+| Domain | 配置名称/标识 | - | ✅ |
+| API Key | Anthropic API 密钥 | ANTHROPIC_AUTH_TOKEN | ✅ |
+| Base URL | 自定义 API 地址（中转站） | ANTHROPIC_BASE_URL | ❌ |
+| Proxy | HTTP/HTTPS 代理 | HTTP_PROXY / HTTPS_PROXY | ❌ |
+| Disable Nonessential Traffic | 是否禁用非必要流量 | CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC | ❌ |
 
 ## 使用场景
 
@@ -199,14 +226,14 @@ hop-claude --migrate-encryption  # 迁移到不同的加密模式
 
 ```bash
 # 创建生产环境配置
-hop-claude --config
+hop-claude -m
 > Create new configuration
 > Domain: production
 > API Key: sk-ant-***
 > Base URL: https://api.example.com
 
 # 创建开发环境配置
-hop-claude --config
+hop-claude -m
 > Create new configuration
 > Domain: development
 > API Key: sk-ant-***
@@ -215,6 +242,9 @@ hop-claude --config
 # 快速切换
 hop-claude -s production    # 切换到生产环境
 hop-claude -s development   # 切换到开发环境
+
+# 不记得配置名？显示选择列表
+hop-claude -s
 ```
 
 ### 场景 2：备份和恢复配置
@@ -227,15 +257,18 @@ hop-claude -e my-backup.json
 hop-claude -i my-backup.json
 ```
 
-### 场景 3：验证 API Key
-
-创建配置时，可以选择验证 API Key 是否有效：
+### 场景 3：继续上次对话
 
 ```bash
-hop-claude --config
-> Create new configuration
-> ...
-> Validate API Key? Yes
+# 方式 1：直接透传 -c
+hop-claude -c
+
+# 方式 2：使用 -- 分隔符（更明确）
+hop-claude -- -c
+
+# 切换配置后继续对话
+hop-claude -s production -c
+hop-claude -s production -- -c
 ```
 
 ## 安全说明
@@ -244,7 +277,7 @@ hop-claude 提供多层安全保护，确保您的 API Key 安全。详细安全
 
 ### 加密模式
 
-hop-claude 支持三种加密模式，安全性从高到低：
+hop-claude 支持两种加密模式：
 
 #### 1. Keychain 模式（推荐）⭐
 
@@ -256,23 +289,15 @@ hop-claude 支持三种加密模式，安全性从高到低：
 - 无需记住密码
 - **限制**：不可跨机器迁移
 
-#### 2. Passphrase 模式
+#### 2. 密码加密模式
 
 **安全级别：MEDIUM to HIGH**（取决于密码强度）
 
 - 使用 AES-256-GCM 加密
 - PBKDF2 密钥派生（100,000 次迭代）
 - 完全可移植跨机器
+- 支持空密码快速启动
 - **限制**：需要记住密码，密码强度很重要
-
-#### 3. Legacy 模式（已弃用）
-
-**安全级别：LOW**
-
-- 基于机器信息（hostname + username）的加密
-- 仅提供混淆，非真正安全
-- 向后兼容 v0.0.x
-- **限制**：已弃用，建议迁移
 
 ### 安全防护
 
@@ -287,8 +312,8 @@ hop-claude 支持三种加密模式，安全性从高到低：
 - 加密存储防止随意浏览
 
 ✅ **防命令注入**
-- 已修复 v0.0.x 中的命令注入漏洞
 - 安全的子进程调用（无 shell 解释）
+- 所有参数正确转义
 
 ✅ **并发写保护**
 - 文件锁防止数据损坏
@@ -308,32 +333,15 @@ hop-claude 支持三种加密模式，安全性从高到低：
 2. ✅ 使用强机器登录密码
 3. ✅ 离开时锁屏（建议自动锁定）
 
-**Passphrase 模式用户**：
-1. ✅ 使用强密码（≥12 字符，混合大小写、符号）
-2. ✅ 考虑使用密码管理器
-3. ✅ 不要将加密配置提交到公开仓库
+**密码加密模式用户**：
+1. ✅ 如需安全，使用强密码（≥8 字符，混合大小写、符号）
+2. ✅ 如需便利，可使用空密码（直接回车）
+3. ✅ 考虑使用密码管理器
+4. ✅ 不要将加密配置提交到公开仓库
 
 **所有用户**：
 1. ✅ 运行 `hop-claude --encryption-info` 验证当前模式
-2. ✅ 从 Legacy 模式迁移：`hop-claude --migrate-encryption`
-3. ✅ 定期轮换 API Key（建议每 90 天）
-
-### 迁移指南
-
-从 v0.0.x 迁移到 v0.1.0+：
-
-```bash
-# 1. 备份配置
-hop-claude -e backup-before-migration.json
-
-# 2. 运行迁移
-hop-claude --migrate-encryption
-
-# 3. 选择 Keychain（最安全）或 Passphrase（可移植）
-
-# 4. 验证迁移
-hop-claude --encryption-info
-```
+2. ✅ 定期轮换 API Key（建议每 90 天）
 
 ### 测试覆盖
 
@@ -400,7 +408,7 @@ rmdir /s %APPDATA%\hop-claude-config
 
 ### 加密模式问题
 
-**忘记 Passphrase 密码**：
+**忘记密码**：
 - 无法恢复，需要重新配置 API Key
 - 如有备份文件，可以尝试导入
 
@@ -409,17 +417,17 @@ rmdir /s %APPDATA%\hop-claude-config
 # 检查 keychain 状态
 hop-claude --encryption-info
 
-# 如不可用，迁移到 Passphrase 模式
+# 如不可用，迁移到密码加密模式
 hop-claude --migrate-encryption
 ```
 
-**从 v0.0.x 迁移**：
+**空密码解密失败**：
 ```bash
-# 查看当前模式（如果是 Legacy 模式，建议迁移）
-hop-claude --encryption-info
+# 启动时会自动提示输入密码
+hop-claude
 
-# 执行迁移（会自动备份）
-hop-claude --migrate-encryption
+# 如果一直提示输入密码，说明你设置了非空密码
+# 需要输入正确密码
 ```
 
 **迁移失败恢复**：
@@ -485,7 +493,7 @@ bun test --coverage
 测试覆盖：
 - ✅ 安全性测试（防命令注入、加密算法、文件权限）
 - ✅ 并发访问测试（文件锁、竞争条件）
-- ✅ 加密迁移测试（Legacy ↔ Keychain ↔ Passphrase）
+- ✅ 加密迁移测试（Keychain ↔ Passphrase）
 - ✅ 边缘情况测试（特殊字符、空配置、错误密码）
 
 ### 项目结构
@@ -496,14 +504,13 @@ hop-claude/
 │   ├── cli.ts                   # CLI 命令定义
 │   ├── index.ts                 # 主入口
 │   ├── config/
-│   │   ├── config-manager.ts    # 配置管理核心（多模式加密支持）
-│   │   ├── encryption.ts        # Legacy 加密/解密
-│   │   ├── encryption-v2.ts     # Passphrase 加密/解密
+│   │   ├── config-manager.ts    # 配置管理核心（双模式加密支持）
+│   │   ├── encryption-v2.ts     # 密码加密/解密（AES-256-GCM）
 │   │   ├── keychain.ts          # OS Keychain 集成
 │   │   ├── storage.ts           # 文件存储（含文件锁）
 │   │   └── validator.ts         # API Key 验证
 │   ├── ui/
-│   │   ├── prompts.ts           # 交互式界面
+│   │   ├── prompts.ts           # 交互式界面（含自动密码提示）
 │   │   └── display.ts           # 显示工具
 │   ├── utils/
 │   │   ├── claude-launcher.ts   # Claude 启动器（安全子进程调用）
@@ -523,36 +530,41 @@ hop-claude/
 
 ## 版本历史
 
+### v2.0.0（2025-01-03）
+
+**破坏性变更**：
+- ✅ 移除 Legacy 加密模式（不安全的机器绑定加密）
+- ✅ `-c/--config` 更改为 `-m/--manage`（避免与 Claude CLI 的 `-c` 冲突）
+
+**新功能**：
+- ✅ `-c` 现在可以透传给 Claude CLI（继续上次对话）
+- ✅ 支持 `--` 分隔符明确区分参数
+- ✅ `-s` 不提供配置名时显示交互式选择列表
+- ✅ 自动密码提示（密码加密模式）
+- ✅ 支持空密码快速启动
+- ✅ 导入/导出后不再自动启动 Claude
+
+**改进**：
+- ✅ 更友好的密码输入体验（先尝试空密码）
+- ✅ 简化加密模式选择（只有两种模式）
+- ✅ 更清晰的用户界面和错误提示
+
 ### v0.1.0（2025-01-03）
 
 **安全更新**：
-- ✅ 修复命令注入漏洞（CRITICAL）- 移除 shell:true，安全子进程调用
-- ✅ 改进错误处理和类型安全（error: any → error: unknown）
-- ✅ 新增文件锁防止并发写入数据损坏
-- ✅ 改进 Windows 二进制检测（支持 claude.cmd、claude.exe）
-- ✅ 增强 Windows ACL 错误处理
+- ✅ 修复命令注入漏洞（CRITICAL）
+- ✅ 新增文件锁防止并发写入
+- ✅ 改进 Windows 二进制检测
 
 **新功能**：
-- ✅ Keychain 加密模式（macOS Keychain、Windows Credential Manager、Linux libsecret）
-- ✅ Passphrase 加密模式（AES-256-GCM + PBKDF2）
-- ✅ 加密模式迁移工具（`--migrate-encryption`）
-- ✅ 加密信息查看（`--encryption-info`）
-- ✅ 会话密码缓存（Passphrase 模式便利功能）
-
-**测试**：
-- ✅ 31 个测试覆盖安全、并发、迁移场景
-- ✅ 99 个断言确保代码质量
-
-**文档**：
-- ✅ 完整 SECURITY.md 文档
-- ✅ 更新 README 包含所有新特性
-- ✅ 迁移指南和最佳实践
+- ✅ Keychain 加密模式
+- ✅ Passphrase 加密模式
+- ✅ 加密模式迁移工具
 
 ### v0.0.x
 
 - 初始版本
 - 基本配置管理功能
-- Legacy 加密模式（已弃用）
 
 ## 许可证
 
