@@ -27,7 +27,8 @@ export async function createCLI() {
     .option('--migrate-encryption', '迁移到不同的加密模式')
     .option('--encryption-info', '显示当前加密模式信息')
     .allowUnknownOption(true) // 允许未知选项（用于透传给 claude）
-    .action(async (options) => {
+    .arguments('[args...]') // 允许额外的参数（用于透传给 claude）
+    .action(async (_, options) => {
       try {
         // 加密模式迁移
         if (options.migrateEncryption) {
